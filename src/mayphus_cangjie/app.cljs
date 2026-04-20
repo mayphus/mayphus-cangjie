@@ -5,10 +5,107 @@
             [reagent.core :as r]
             ["react-dom/client" :as react-dom-client]))
 
+(def translations
+  {:en {:site-title "Cangjie 6 Tree"
+        :site-description "Search the full Cangjie 6 dictionary with a tree view that highlights the active path."
+        :nav-home "Home"
+        :nav-dictionary "Dictionary"
+        :tool-kicker "Tool"
+        :page-title "Cangjie 6 Tree"
+        :lead "Explore Cangjie structures visually instead of memorizing them as a flat table. Type a character, root, or code and the active path updates immediately."
+        :entry-count "Full dictionary entries: %s."
+        :search-label "Search character or code"
+        :search-placeholder "For example: 照 / arf / 日口火 / 問"
+        :search-help "Supports characters, letter codes, and root aliases."
+        :graph-hint "Drag to move, scroll to zoom, and click a node to follow that code path."
+        :graph-root "Showing the first layer of root branches."
+        :graph-prefix "Prefix %s · %s matches"
+        :button-fit "Fit"
+        :button-reset "Reset"
+        :loading-kicker "Loading Dictionary"
+        :loading-title "Loading the Cangjie 6 dictionary"
+        :loading-copy "The static dictionary asset loads first, then the tree becomes interactive."
+        :error-kicker "Load Failed"
+        :error-title "The dictionary could not be loaded"
+        :error-copy "Please refresh and try again."
+        :footer-prefix "Source:"
+        :footer-middle ". License preserved as "
+        :footer-suffix ", with the dictionary compiled into a static browser asset."
+        :locale-en "EN"
+        :locale-zh "繁"
+        :start "Start"
+        :start-secondary "Start"
+        :leaf "Leaf"
+        :count-suffix "entries"
+        :root-families {"a" "Sun / Say"
+                        "b" "Moon"
+                        "c" "Metal"
+                        "d" "Wood"
+                        "e" "Water"
+                        "f" "Fire"
+                        "g" "Earth"
+                        "h" "Bamboo"
+                        "i" "Halberd"
+                        "j" "Ten"
+                        "k" "Big"
+                        "l" "Center"
+                        "m" "One"
+                        "n" "Bow"
+                        "o" "Person"
+                        "p" "Heart"
+                        "q" "Hand"
+                        "r" "Mouth"
+                        "s" "Corpse"
+                        "t" "Twenty"
+                        "u" "Mountain"
+                        "v" "Woman"
+                        "w" "Field"
+                        "x" "Difficult / Heavy"
+                        "y" "Divination"}}
+   :zh-Hant {:site-title "倉頡六代樹圖"
+             :site-description "用完整倉頡六代字表搭配樹狀分支與高亮路徑，搜尋單字、字根與字碼。"
+             :nav-home "Home"
+             :nav-dictionary "Dictionary"
+             :tool-kicker "Tool"
+             :page-title "倉頡六代樹圖"
+             :lead "Explore Cangjie structures visually instead of memorizing them as a flat table. 輸入單字、字根或英文字碼，畫面會同步更新高亮路徑。"
+             :entry-count "完整字表條目 %s 筆。"
+             :search-label "查詢字或字碼"
+             :search-placeholder "例如：照 / arf / 日口火 / 問"
+             :search-help "支援單字、英文字碼與字根別名。"
+             :graph-hint "拖曳移動，滾輪縮放，點節點可直接沿著字碼往下走。"
+             :graph-root "目前顯示第一層部件分支。"
+             :graph-prefix "前綴 %s · %s 個符合字"
+             :button-fit "適中"
+             :button-reset "重設"
+             :loading-kicker "Loading Dictionary"
+             :loading-title "正在載入倉頡六代字表"
+             :loading-copy "靜態資產會先載入完整碼表，再展開搜尋與樹圖。"
+             :error-kicker "Load Failed"
+             :error-title "字表沒有成功載入"
+             :error-copy "請重新整理頁面再試一次。"
+             :footer-prefix "資料來源："
+             :footer-middle "。字表授權沿用 "
+             :footer-suffix "，本站將原始碼表轉成靜態查詢資產後提供瀏覽。"
+             :locale-en "EN"
+             :locale-zh "繁"
+             :start "開始"
+             :start-secondary "Start"
+             :leaf "葉節點"
+             :count-suffix "字"
+             :root-families {}}})
+
+(defn detect-locale []
+  (let [language (some-> js/navigator .-language str/lower-case)]
+    (if (and language (str/starts-with? language "zh"))
+      :zh-Hant
+      :en)))
+
 (defonce app-state*
   (r/atom {:status :loading
            :dataset cangjie/empty-dataset
            :error nil
+           :locale (detect-locale)
            :raw-query ""
            :selected-prefix nil
            :zoom-state nil
@@ -16,8 +113,17 @@
 
 (defonce load-started? (atom false))
 
-(defn format-number [value]
-  (.toLocaleString value "zh-Hant-TW"))
+(defn format-number [locale value]
+  (.toLocaleString value (if (= locale :zh-Hant) "zh-Hant-TW" "en-US")))
+
+(defn tr [locale key]
+  (get-in translations [locale key]))
+
+(defn tformat [template & values]
+  (reduce (fn [result value]
+            (str/replace-first result "%s" (str value)))
+          template
+          values))
 
 (defn default-zoom-state []
   {:x 0
@@ -60,12 +166,20 @@
   {:x (- (.-clientX event) (:x last-point))
    :y (- (.-clientY event) (:y last-point))})
 
-(defn tree-node-label [{:keys [family glyph]}]
-  (if (#{"開始" "起點"} glyph)
-    ["開始" "Start"]
-    [glyph family]))
+(defn localized-family [locale {:keys [family glyph prefix]}]
+  (cond
+    (#{"開始" "起點"} glyph) (tr locale :start-secondary)
+    (= family "葉節點") (tr locale :leaf)
+    (= locale :en) (or (get-in translations [:en :root-families (some-> prefix seq last str)])
+                       family)
+    :else family))
 
-(defn tree-svg-content [{:keys [edges node-height node-width nodes y-offset on-select transform]}]
+(defn tree-node-label [locale {:keys [glyph] :as node}]
+  (if (#{"開始" "起點"} glyph)
+    [(tr locale :start) (tr locale :start-secondary)]
+    [glyph (localized-family locale node)]))
+
+(defn tree-svg-content [{:keys [edges locale node-height node-width nodes y-offset on-select transform]}]
   [:g {:transform transform}
    (for [{:keys [from to]} edges]
      ^{:key (str (:id from) "->" (:id to))}
@@ -80,7 +194,7 @@
                        ", " mid-x " " to-y
                        ", " to-x " " to-y))}])
    (for [{:keys [count id prefix selected? x y] :as node} nodes
-         :let [[line-1 line-2] (tree-node-label node)]]
+         :let [[line-1 line-2] (tree-node-label locale node)]]
      ^{:key id}
      [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
           :transform (str "translate(" x "," (+ y y-offset) ")")
@@ -98,10 +212,10 @@
               :x (/ node-width 2)
               :y 38}
        (if count
-         (str line-2 " · " count " 字")
+         (str line-2 " · " (format-number locale count) " " (tr locale :count-suffix))
          line-2)]])])
 
-(defn interactive-tree-svg [{:keys [edges node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
+(defn interactive-tree-svg [{:keys [edges locale node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
   (let [svg-node* (atom nil)
         wheel-handler* (atom nil)]
     (r/create-class
@@ -120,7 +234,7 @@
           (when-let [wheel-handler @wheel-handler*]
             (.removeEventListener svg-node "wheel" wheel-handler))))
       :reagent-render
-      (fn [{:keys [edges node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
+      (fn [{:keys [edges locale node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
         [:svg {:class "cangjie-tree-svg"
                :ref #(reset! svg-node* %)
                :viewBox (str "0 0 " (max 960 (:width view-box)) " " (max 460 (min 760 (:height view-box))))
@@ -143,6 +257,7 @@
                                   (reset! drag-state* nil)))
                :on-pointer-cancel #(reset! drag-state* nil)}
          [tree-svg-content {:edges edges
+                            :locale locale
                             :node-height node-height
                             :node-width node-width
                             :nodes nodes
@@ -158,7 +273,7 @@
          :drag-state nil))
 
 (defn current-view []
-  (let [{:keys [dataset raw-query selected-prefix]} @app-state*
+  (let [{:keys [dataset raw-query selected-prefix locale]} @app-state*
         trimmed (str/trim raw-query)
         normalized (cangjie/normalize-query trimmed)
         exact-entry (when-not normalized
@@ -178,31 +293,33 @@
      :effective-prefix effective-prefix
      :featured-entries featured-entries
      :matches matches
+     :locale locale
      :raw-query raw-query}))
 
-(defn graph-controls [prefix match-count]
+(defn graph-controls [locale prefix match-count]
   [:div {:class "cangjie-graph-toolbar"}
    [:div {:class "cangjie-graph-copy"}
-    [:p {:class "cangjie-graph-hint"} "拖曳移動，滾輪縮放，點節點可直接沿著字碼往下走。"]
+    [:p {:class "cangjie-graph-hint"} (tr locale :graph-hint)]
     [:p {:class "cangjie-graph-meta"}
      (if (str/blank? prefix)
-       "目前顯示第一層部件分支。"
-       (str "前綴 " (str/upper-case prefix) " · "
-            (format-number match-count) " 個符合字"))]]
+       (tr locale :graph-root)
+       (tformat (tr locale :graph-prefix)
+                (str/upper-case prefix)
+                (format-number locale match-count)))]]
    [:div {:class "cangjie-graph-actions"}
     [:button {:class "cangjie-graph-button"
               :type "button"
               :on-click #(swap! app-state* assoc :zoom-state nil :drag-state nil)}
-     "適中"]
+     (tr locale :button-fit)]
     [:button {:class "cangjie-graph-button"
               :type "button"
               :on-click #(swap! app-state* assoc
                                 :zoom-state (default-zoom-state)
                                 :drag-state nil)}
-     "重設"]]])
+     (tr locale :button-reset)]]])
 
 (defn tree-panel []
-  (let [{:keys [dataset active-entry effective-prefix matches]} (current-view)
+  (let [{:keys [dataset active-entry effective-prefix locale matches]} (current-view)
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
         {:keys [edges node-height node-width nodes view-box y-offset]}
@@ -213,9 +330,10 @@
     (when (nil? @zoom-state*)
       (reset! zoom-state* zoom-state))
     [:section {:class "atlas-card atlas-tree-card"}
-     [graph-controls effective-prefix (count matches)]
+     [graph-controls locale effective-prefix (count matches)]
      [:div {:class "cangjie-tree-canvas"}
       [interactive-tree-svg {:edges edges
+                             :locale locale
                              :node-height node-height
                              :node-width node-width
                              :nodes nodes
@@ -229,17 +347,18 @@
                              :drag-state* drag-state*}]]]))
 
 (defn footer-panel []
-  (let [{:keys [meta]} (:dataset @app-state*)]
+  (let [{:keys [locale]} @app-state*
+        {:keys [meta]} (:dataset @app-state*)]
     [:footer {:class "atlas-footer"}
      [:p
-      "資料來源："
+      (tr locale :footer-prefix)
       [:a {:href (:source-url meta)
            :rel "noreferrer"
            :target "_blank"}
        "rime-cangjie6"]
-      "。字表授權沿用 "
+      (tr locale :footer-middle)
       (or (:license meta) "GPL")
-      "，本站將原始碼表轉成靜態查詢資產後提供瀏覽。"]
+      (tr locale :footer-suffix)]
      [:a {:class "site-link"
           :href "https://mayphus.org/"
           :rel "noreferrer"
@@ -247,7 +366,7 @@
       "mayphus.org"]]))
 
 (defn ready-page []
-  (let [{:keys [dataset raw-query]} @app-state*]
+  (let [{:keys [dataset locale raw-query]} @app-state*]
     [:div {:class "page landing-page"}
      [:header {:class "landing-header"}
       [:div {:class "landing-header-row"}
@@ -255,34 +374,42 @@
             :href "https://mayphus.org/"
             :rel "noreferrer"
             :target "_blank"}
-        "Mayphus"]
+       "Mayphus"]
        [:nav {:class "landing-nav"}
         [:a {:href "https://mayphus.org/"
              :rel "noreferrer"
              :target "_blank"}
-         "Home"]
+         (tr locale :nav-home)]
         [:a {:href "https://github.com/rime-aca/rime-cangjie6"
              :rel "noreferrer"
              :target "_blank"}
-         "Dictionary"]]]
+         (tr locale :nav-dictionary)]
+        [:div {:class "locale-switch"}
+         [:button {:class (str "locale-button" (when (= locale :en) " is-active"))
+                   :type "button"
+                   :on-click #(swap! app-state* assoc :locale :en)}
+          (tr locale :locale-en)]
+         [:button {:class (str "locale-button" (when (= locale :zh-Hant) " is-active"))
+                   :type "button"
+                   :on-click #(swap! app-state* assoc :locale :zh-Hant)}
+          (tr locale :locale-zh)]]]]
       [:div {:class "landing-copy"}
-       [:p {:class "eyebrow"} "Tool"]
-       [:h1 {:class "landing-title"} "倉頡六代樹圖"]
+       [:p {:class "eyebrow"} (tr locale :tool-kicker)]
+       [:h1 {:class "landing-title"} (tr locale :page-title)]
        [:p {:class "landing-lead"}
-        "Explore Cangjie structures visually instead of memorizing them as a flat table. 輸入單字、字根或英文字碼，畫面會同步更新高亮路徑。"]
+        (tr locale :lead)]
        [:p {:class "landing-meta"}
-        (str "完整字表條目 "
-             (format-number (or (get-in dataset [:meta :entry-count])
-                                (count (:entries dataset))))
-             " 筆。")]]
+        (tformat (tr locale :entry-count)
+                 (format-number locale (or (get-in dataset [:meta :entry-count])
+                                           (count (:entries dataset)))))]]
       [:div {:class "tool-search-block"}
        [:label {:class "cangjie-search"}
-        [:span {:class "cangjie-search-label"} "查詢字或字碼"]
+        [:span {:class "cangjie-search-label"} (tr locale :search-label)]
         [:input {:class "cangjie-search-input"
                  :id "cangjie-query"
                  :name "cangjie-query"
                  :type "text"
-                 :placeholder "例如：照 / arf / 日口火 / 問"
+                 :placeholder (tr locale :search-placeholder)
                  :value raw-query
                  :on-change #(swap! app-state* assoc
                                     :raw-query (.. % -target -value)
@@ -290,24 +417,26 @@
                                     :zoom-state nil
                                     :drag-state nil)}]]
        [:p {:class "landing-meta"}
-        "支援單字、英文字碼與字根別名。"]]]
+        (tr locale :search-help)]]]
      [:section {:class "home-section tool-chart-section"}
       [tree-panel]]
      [footer-panel]]))
 
 (defn loading-page []
-  [:div {:class "page landing-page"}
-   [:div {:class "atlas-loading"}
-    [:p {:class "eyebrow"} "Loading Dictionary"]
-    [:h1 {:class "landing-title"} "正在載入倉頡六代字表"]
-    [:p {:class "landing-lead"} "靜態資產會先載入完整碼表，再展開搜尋與樹圖。"]]])
+  (let [{:keys [locale]} @app-state*]
+    [:div {:class "page landing-page"}
+     [:div {:class "atlas-loading"}
+      [:p {:class "eyebrow"} (tr locale :loading-kicker)]
+      [:h1 {:class "landing-title"} (tr locale :loading-title)]
+      [:p {:class "landing-lead"} (tr locale :loading-copy)]]]))
 
 (defn error-page []
-  [:div {:class "page landing-page"}
-   [:div {:class "atlas-loading"}
-    [:p {:class "eyebrow"} "Load Failed"]
-    [:h1 {:class "landing-title"} "字表沒有成功載入"]
-    [:p {:class "landing-lead"} (or (:error @app-state*) "請重新整理頁面再試一次。")]]])
+  (let [{:keys [locale]} @app-state*]
+    [:div {:class "page landing-page"}
+     [:div {:class "atlas-loading"}
+      [:p {:class "eyebrow"} (tr locale :error-kicker)]
+      [:h1 {:class "landing-title"} (tr locale :error-title)]
+      [:p {:class "landing-lead"} (or (:error @app-state*) (tr locale :error-copy))]]]))
 
 (defn load-dataset! []
   (when-not @load-started?
@@ -330,11 +459,14 @@
                          :error (or (.-message error) "Unknown error")))))))
 
 (defn shell []
-  [:main {:class "app-shell"}
-   (case (:status @app-state*)
-     :loading [loading-page]
-     :error [error-page]
-     [ready-page])])
+  (let [{:keys [locale status]} @app-state*]
+    (set! (.-lang (.-documentElement js/document)) (name locale))
+    (set! (.-title js/document) (tr locale :site-title))
+    [:main {:class "app-shell"}
+     (case status
+       :loading [loading-page]
+       :error [error-page]
+       [ready-page])]))
 
 (defn init []
   (load-dataset!)
