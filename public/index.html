@@ -294,54 +294,52 @@
       .cangjie-tree-svg {
         display: block;
         width: 100%;
-        min-height: 720px;
+        min-height: 640px;
         touch-action: none;
       }
 
-      .cangjie-tree-edge {
-        fill: none;
-        stroke: rgba(125, 90, 55, 0.08);
-        stroke-width: 1.05;
-      }
-
-      .cangjie-tree-edge.is-active {
-        stroke: var(--accent);
-        stroke-width: 2.3;
-      }
-
-      .cangjie-tree-visual-node {
+      .cangjie-icicle-node {
         cursor: pointer;
-        opacity: 0.16;
-        transition: opacity 120ms ease;
+        transition: opacity 120ms ease, transform 120ms ease;
       }
 
-      .cangjie-tree-visual-node.is-active {
+      .cangjie-icicle-node.is-muted {
+        opacity: 0.22;
+      }
+
+      .cangjie-icicle-node.is-active {
         opacity: 1;
       }
 
-      .cangjie-tree-node-hitbox {
-        fill: transparent;
+      .cangjie-icicle-rect {
+        fill: rgba(109, 75, 62, 0.08);
+        stroke: rgba(109, 75, 62, 0.16);
+        stroke-width: 1;
       }
 
-      .cangjie-tree-visual-node:hover {
-        opacity: 0.42;
+      .cangjie-icicle-node.is-active .cangjie-icicle-rect {
+        fill: rgba(109, 75, 62, 0.16);
+        stroke: var(--accent);
+        stroke-width: 1.4;
       }
 
-      .cangjie-tree-visual-node.is-active:hover {
-        opacity: 1;
+      .cangjie-icicle-node:hover {
+        opacity: 0.9;
       }
 
-      .cangjie-tree-node-glyph {
+      .cangjie-icicle-label {
         fill: var(--text);
         pointer-events: none;
-        font-size: 1rem;
+        font-size: 0.96rem;
         font-weight: 700;
         letter-spacing: 0.02em;
       }
 
-      .cangjie-tree-visual-node.is-active .cangjie-tree-node-glyph {
-        fill: var(--accent);
-        font-size: 1.08rem;
+      .cangjie-icicle-note {
+        fill: var(--muted);
+        pointer-events: none;
+        font-size: 0.72rem;
+        letter-spacing: 0.01em;
       }
 
       .atlas-footer {

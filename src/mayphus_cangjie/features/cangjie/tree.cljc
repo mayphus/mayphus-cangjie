@@ -1,12 +1,11 @@
 (ns mayphus-cangjie.features.cangjie.tree
   (:require [clojure.string :as str]
-            [mayphus-cangjie.features.cangjie :as cangjie]
-            #?(:cljs ["d3-hierarchy" :as d3])))
+            [mayphus-cangjie.features.cangjie :as cangjie]))
 
-(def radial-radius 300)
-(def radial-center-x 420)
-(def radial-center-y 360)
-(def radial-label-gap 18)
+(def icicle-width 1200)
+(def icicle-row-height 92)
+(def icicle-row-gap 8)
+(def icicle-padding 16)
 
 (defn path-prefixes [prefix]
   (into #{""}
@@ -86,78 +85,58 @@
              :options (cangjie/next-step-groups dataset prefix)})
           prefixes)))
 
-(defn- layout-tree-manual [root]
-  (let [nodes* (atom [])
-        edges* (atom [])
-        next-y* (atom 40)]
-    (letfn [(visit [node depth parent]
+(defn- annotate-values [{:keys [children] :as node}]
+  (if (seq children)
+    (let [children* (mapv annotate-values children)
+          total-value (reduce + (map :value children*))]
+      (assoc node
+             :children children*
+             :value (max 1 total-value)))
+    (assoc node :value 1)))
+
+(defn- max-depth [{:keys [children]}]
+  (if (seq children)
+    (inc (reduce max (map max-depth children)))
+    1))
+
+(defn- layout-icicle [root]
+  (let [root* (annotate-values root)
+        nodes* (atom [])
+        edges* (atom [])]
+    (letfn [(visit [node depth x0 x1 parent]
               (let [children (:children node)
-                    child-positions (mapv #(visit % (inc depth) node) children)
-                    y (if (seq child-positions)
-                        (/ (+ (apply min child-positions) (apply max child-positions)) 2)
-                        (let [current @next-y*]
-                          (swap! next-y* + 56)
-                          current))
-                    laid-out (assoc node :x (+ 32 (* depth 140)) :y y)]
-                (swap! nodes* conj laid-out)
-                (when parent
-                  (swap! edges* conj {:from parent :to laid-out}))
-                y))]
-      (visit root 0 nil)
-      {:view-box {:width 980
-                  :height (max 560 @next-y*)}
-       :y-offset 0
-       :nodes @nodes*
-       :edges @edges*})))
-
-#?(:cljs
-   (defn- js-call [obj method]
-     (js* "(~{}[~{}]).call(~{})" obj method obj)))
-
-#?(:cljs
-   (defn- radial-point [angle radius]
-     (let [adjusted-angle (- angle (/ js/Math.PI 2))]
-       {:x (+ radial-center-x (* radius (js/Math.cos adjusted-angle)))
-        :y (+ radial-center-y (* radius (js/Math.sin adjusted-angle)))})))
-
-#?(:cljs
-   (defn- radial-tree-layout [root]
-     (let [tree-data (clj->js root)
-           hierarchy (.hierarchy d3 tree-data)
-           layout (doto (.tree d3)
-                    (.size #js [(* 2 js/Math.PI) radial-radius])
-                    (.separation (fn [a b]
-                                   (/ (if (= (.-parent a) (.-parent b)) 1 2)
-                                      (max 1 (.-depth a))))))
-           laid-out-hierarchy (layout hierarchy)
-           descendants (array-seq (js-call laid-out-hierarchy "descendants"))
-           nodes (mapv (fn [node]
-                         (let [data (js->clj (.-data node) :keywordize-keys true)
-                               point (radial-point (.-x node) (.-y node))
-                               label-point (radial-point (.-x node) (+ (.-y node) radial-label-gap))
-                               outward-right? (< (.-x node) js/Math.PI)]
-                           (assoc data
-                                  :x (:x point)
-                                  :y (:y point)
-                                  :angle (.-x node)
-                                  :radius (.-y node)
-                                  :label-x (:x label-point)
-                                  :label-y (:y label-point)
-                                  :text-anchor (if outward-right? "start" "end")
-                                  :label-rotate (if outward-right? 0 180))))
-                       descendants)
-           nodes-by-id (into {} (map (juxt :id identity) nodes))
-           edges (mapv (fn [link]
-                         (let [source-id (.. link -source -data -id)
-                               target-id (.. link -target -data -id)]
-                           {:from (get nodes-by-id source-id)
-                            :to (get nodes-by-id target-id)}))
-                       (array-seq (js-call laid-out-hierarchy "links")))]
-       {:view-box {:width 840
-                   :height 720}
-        :y-offset 0
-        :nodes nodes
-        :edges edges})))
+                    display? (not (str/blank? (:prefix node)))
+                    y (+ icicle-padding (* (max 0 (dec depth)) icicle-row-height))
+                    laid-out (assoc node
+                                    :x x0
+                                    :y y
+                                    :width (max 0 (- x1 x0))
+                                    :height (- icicle-row-height icicle-row-gap)
+                                    :depth depth)]
+                (when display?
+                  (swap! nodes* conj laid-out)
+                  (when parent
+                    (swap! edges* conj {:from parent :to laid-out})))
+                (when (seq children)
+                  (let [total-value (double (max 1 (:value node)))
+                        span (- x1 x0)]
+                    (loop [remaining children
+                           cursor x0]
+                      (when-let [child (first remaining)]
+                        (let [child-width (if (next remaining)
+                                            (* span (/ (:value child) total-value))
+                                            (- x1 cursor))
+                              next-cursor (+ cursor child-width)]
+                          (visit child (inc depth) cursor next-cursor (when display? laid-out))
+                          (recur (next remaining) next-cursor))))))))]
+      (visit root* 0 icicle-padding (- icicle-width icicle-padding) nil)
+      (let [visible-depth (max 1 (dec (max-depth root*)))]
+        {:view-box {:width icicle-width
+                    :height (+ (* 2 icicle-padding)
+                               (* visible-depth icicle-row-height))}
+         :y-offset 0
+         :nodes @nodes*
+         :edges @edges*}))))
 
 (defn tree-layout [{:keys [dataset entry prefix expanded-prefixes]}]
   (let [active-code (or prefix "")
@@ -166,5 +145,4 @@
                                :exact-entry entry
                                :expanded-prefixes (into (or expanded-prefixes #{""})
                                                         (path-prefixes active-code))})]
-    #?(:cljs (radial-tree-layout root)
-       :clj (layout-tree-manual root))))
+    (layout-icicle root)))

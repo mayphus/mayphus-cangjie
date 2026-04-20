@@ -188,27 +188,45 @@
   (when (and node (= :auto @zoom-mode*))
     (reset! zoom-state* (fit-transform view-box (current-viewport-size node)))))
 
-(defn tree-svg-content [{:keys [edges nodes on-select transform]}]
-  [:g {:transform transform}
-   (for [{:keys [from to]} edges]
-     ^{:key (str (:id from) "->" (:id to))}
-     [:path {:class (str "cangjie-tree-edge" (when (:selected? to) " is-active"))
-             :d (str "M " (:x from) " " (:y from)
-                     " L " (:x to) " " (:y to))}])
-   (for [{:keys [glyph id prefix selected? x y] :as node} nodes
-         :when (not (str/blank? prefix))]
-     ^{:key id}
-     [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
-          :transform (str "translate(" x "," y ")")
-          :on-click #(when prefix (on-select node))}
-      [:circle {:class "cangjie-tree-node-hitbox"
-                :r (if selected? 16 13)}]
-      [:text {:class "cangjie-tree-node-glyph"
-              :text-anchor "middle"
-              :dominant-baseline "central"}
-       glyph]])])
+(defn icicle-note [{:keys [examples]}]
+  (some->> examples seq (str/join " · ")))
 
-(defn interactive-tree-svg [{:keys [edges locale nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
+(defn tree-svg-content [{:keys [nodes on-select transform]}]
+  [:g {:transform transform}
+   (for [{:keys [glyph height id prefix selected? width x y] :as node} nodes
+         :when (not (str/blank? prefix))
+         :let [note (icicle-note node)
+               roomy? (and (> width 88) (> height 44))
+               label-x (+ x (if roomy? 12 (/ width 2)))
+               glyph-y (+ y (if roomy? 28 (/ height 2)))]]
+     ^{:key id}
+     [:g {:class (str "cangjie-icicle-node" (if selected? " is-active" " is-muted"))
+          :on-click #(when prefix (on-select node))}
+      (when note
+        [:title note])
+      [:rect {:class "cangjie-icicle-rect"
+              :x x
+              :y y
+              :rx 10
+              :ry 10
+              :width (max 0 width)
+              :height (max 0 height)}]
+      (when (and (> width 28) (> height 22))
+        [:text {:class "cangjie-icicle-label"
+                :x label-x
+                :y glyph-y
+                :text-anchor (if roomy? "start" "middle")
+                :dominant-baseline "central"}
+         glyph])
+      (when (and roomy? note)
+        [:text {:class "cangjie-icicle-note"
+                :x label-x
+                :y (+ y 52)
+                :text-anchor "start"
+                :dominant-baseline "central"}
+         note])])])
+
+(defn interactive-tree-svg [{:keys [nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
   (let [svg-node* (atom nil)
         wheel-handler* (atom nil)
         resize-observer* (atom nil)]
@@ -246,13 +264,13 @@
         (when-let [observer @resize-observer*]
           (.disconnect observer)))
       :reagent-render
-      (fn [{:keys [edges locale nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
+      (fn [{:keys [nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
         [:svg {:class "cangjie-tree-svg"
                :ref #(reset! svg-node* %)
                :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
                :preserveAspectRatio "xMidYMid meet"
                :on-pointer-down (fn [event]
-                                  (let [node-target (.closest (.-target event) ".cangjie-tree-visual-node")]
+                                  (let [node-target (.closest (.-target event) ".cangjie-icicle-node")]
                                     (when (and (= 0 (.-button event))
                                                (nil? node-target))
                                     (.setPointerCapture (.-currentTarget event) (.-pointerId event))
@@ -271,8 +289,7 @@
                                   (.releasePointerCapture (.-currentTarget event) (.-pointerId event))
                                   (reset! drag-state* nil)))
                :on-pointer-cancel #(reset! drag-state* nil)}
-         [tree-svg-content {:edges edges
-                            :nodes nodes
+         [tree-svg-content {:nodes nodes
                             :on-select on-select
                             :transform (transform-string @zoom-state*)}]])})))
 
@@ -319,13 +336,17 @@
 (defn toggle-node! [{:keys [expandable? prefix]}]
   (swap! app-state*
          (fn [state]
-           (let [expanded-prefixes (or (:expanded-prefixes state) #{""})
+           (let [selected-prefix (:selected-prefix state)
                  next-expanded (cond
-                                 (not expandable?) expanded-prefixes
-                                 (contains? expanded-prefixes prefix) (collapse-prefixes expanded-prefixes prefix)
-                                 :else (conj expanded-prefixes prefix))]
+                                 (str/blank? prefix) #{""}
+                                 (not expandable?) (path-prefixes prefix)
+                                 (= prefix selected-prefix) (into #{""} (butlast (vec (path-prefixes prefix))))
+                                 :else (path-prefixes prefix))]
              (assoc state
-                    :selected-prefix prefix
+                    :selected-prefix (if (and expandable?
+                                              (= prefix selected-prefix))
+                                       (last (sort-by count next-expanded))
+                                       prefix)
                     :expanded-prefixes next-expanded
                     :zoom-mode :auto
                     :zoom-state nil
