@@ -349,13 +349,13 @@
            [:span {:class "cangjie-candidate-code"} (str/upper-case code)]])]])))
 
 (defn tree-panel []
-  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale matches]} (current-view)
+  (let [{:keys [dataset active-entry exact-entry effective-prefix expanded-prefixes locale matches]} (current-view)
         zoom-mode* (r/cursor app-state* [:zoom-mode])
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
         {:keys [edges nodes view-box]}
         (tree/tree-layout {:dataset dataset
-                           :entry active-entry
+                           :entry exact-entry
                            :prefix effective-prefix
                            :expanded-prefixes expanded-prefixes})
         auto-fit-key [effective-prefix expanded-prefixes (count nodes) (count edges)]
