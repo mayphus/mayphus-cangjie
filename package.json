@@ -4,8 +4,10 @@
   "packageManager": "bun@1.3.6",
   "type": "module",
   "scripts": {
-    "dev": "rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow watch app",
-    "build": "rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow release app",
+    "generate:data": "clojure -M:generate-data",
+    "sync:data": "./script/sync-cangjie-data.sh",
+    "dev": "bun run generate:data && rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow watch app",
+    "build": "bun run generate:data && rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow release app",
     "test": "clojure -M:test"
   },
   "dependencies": {

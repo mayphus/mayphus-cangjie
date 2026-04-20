@@ -40,59 +40,22 @@
    {}
    root-defs))
 
-(def common-entries
-  [{:char "日" :code "a"}
-   {:char "月" :code "b"}
-   {:char "金" :code "c"}
-   {:char "木" :code "d"}
-   {:char "水" :code "e"}
-   {:char "火" :code "f"}
-   {:char "土" :code "g"}
-   {:char "戈" :code "i"}
-   {:char "十" :code "j"}
-   {:char "大" :code "k"}
-   {:char "中" :code "l"}
-   {:char "一" :code "m"}
-   {:char "弓" :code "n"}
-   {:char "人" :code "o"}
-   {:char "心" :code "p"}
-   {:char "手" :code "q"}
-   {:char "口" :code "r"}
-   {:char "尸" :code "s"}
-   {:char "廿" :code "t"}
-   {:char "山" :code "u"}
-   {:char "女" :code "v"}
-   {:char "田" :code "w"}
-   {:char "卜" :code "y"}
-   {:char "明" :code "ab" :note "先取日，再補月，適合拿來理解雙部件字如何往下走。"}
-   {:char "好" :code "vnd" :note "女旁後接弓，再補木，能看到三層分支如何收斂。"}
-   {:char "你" :code "onf"}
-   {:char "我" :code "hqi"}
-   {:char "是" :code "amyo"}
-   {:char "時" :code "agdi"}
-   {:char "間" :code "ana" :note "A 開頭後進到 N 支，再回到 A，可和「問」一起比較。"}
-   {:char "問" :code "anr" :note "與「間」共用 AN 開頭，第三碼分到口。"}
-   {:char "國" :code "wirm"}
-   {:char "語" :code "yrmdr"}
-   {:char "林" :code "dd"}
-   {:char "森" :code "ddd"}
-   {:char "想" :code "dup"}
-   {:char "看" :code "hqbu"}
-   {:char "說" :code "yrcru"}
-   {:char "謝" :code "yrhhi"}
-   {:char "學" :code "xbnd" :note "用 X 當補助碼開頭，是很好的特殊例子。"}
-   {:char "愛" :code "bbphe"}
-   {:char "家" :code "jmso"}
-   {:char "照" :code "arf" :note "先從 A 的日／曰系分支進來，再沿著口、火走到葉節點。"}
-   {:char "書" :code "lga"}
-   {:char "電" :code "mzlwu"}
-   {:char "體" :code "bbtwt"}
-   {:char "醫" :code "semcw"}
-   {:char "樂" :code "vid"}])
+(def featured-characters
+  ["學" "照" "醫" "體" "問" "間" "國" "樂"])
 
-(defn enrich-entry [{:keys [char code] :as entry}]
+(def empty-dataset
+  {:meta nil
+   :entries []
+   :entry-by-char {}
+   :featured-entries []
+   :prefix-groups {}})
+
+(defn enrich-entry [{:keys [char code weight stem] :as entry}]
   (assoc entry
+         :char char
          :code (str/lower-case code)
+         :weight weight
+         :stem stem
          :roots (mapv (fn [letter]
                         (get root-by-letter (str letter)
                              {:letter (str letter)
@@ -102,24 +65,91 @@
                               :hint ""}))
                       code)))
 
-(def entries
-  (mapv enrich-entry common-entries))
+(defn entry-sort-key [{:keys [char code weight]}]
+  [(count code)
+   (- (or weight 0))
+   char
+   code])
 
-(def entry-by-char
-  (into {} (map (juxt :char identity) entries)))
+(defn choose-better-entry [current candidate]
+  (if (or (nil? current)
+          (neg? (compare (entry-sort-key candidate)
+                         (entry-sort-key current))))
+    candidate
+    current))
 
-(def featured-characters ["照" "問" "間" "國" "學"])
+(defn- add-example [examples value]
+  (let [with-value (if (some #(= value %) examples)
+                     examples
+                     (conj examples value))]
+    (if (> (count with-value) 4)
+      (subvec with-value 0 4)
+      with-value)))
 
-(def ^:private featured-entries
-  (mapv entry-by-char featured-characters))
+(defn- update-prefix-groups [prefix-groups {:keys [char code]}]
+  (reduce (fn [acc prefix-length]
+            (let [prefix (subs code 0 prefix-length)
+                  next-letter (subs code prefix-length (inc prefix-length))]
+              (update-in acc [prefix next-letter]
+                         (fn [stats]
+                           {:count (inc (or (:count stats) 0))
+                            :examples (add-example (or (:examples stats) []) char)}))))
+          prefix-groups
+          (range 0 (count code))))
 
-(defn root-path [code]
-  (mapv (fn [letter]
-          (get root-by-letter (str letter)))
-        code))
+(defn- finalize-prefix-groups [prefix-groups]
+  (into {}
+        (map (fn [[prefix groups]]
+               [prefix
+                (->> groups
+                     (map (fn [[letter {:keys [count examples]}]]
+                            (let [root (get root-by-letter letter)]
+                              {:letter letter
+                               :glyph (:glyph root)
+                               :family (:family root)
+                               :hint (:hint root)
+                               :count count
+                               :examples examples
+                               :prefix (str prefix letter)})))
+                     (sort-by (juxt (comp - :count) :letter))
+                     vec)]))
+        prefix-groups))
 
-(defn exact-char [value]
-  (get entry-by-char value))
+(defn build-dataset
+  ([entries]
+   (build-dataset nil entries))
+  ([meta entries]
+   (let [prepared-entries (->> entries
+                               (map enrich-entry)
+                               (sort-by entry-sort-key)
+                               vec)
+         entry-by-char (reduce (fn [acc entry]
+                                 (update acc (:char entry) choose-better-entry entry))
+                               {}
+                               prepared-entries)
+         prefix-groups (->> prepared-entries
+                            (reduce update-prefix-groups {})
+                            finalize-prefix-groups)
+         featured-entries (->> featured-characters
+                              (keep entry-by-char)
+                              vec)]
+     {:meta meta
+      :entries prepared-entries
+      :entry-by-char entry-by-char
+      :prefix-groups prefix-groups
+      :featured-entries featured-entries})))
+
+(defn compact-entry->entry [[char code weight stem]]
+  {:char char
+   :code code
+   :weight weight
+   :stem stem})
+
+(defn build-dataset-from-payload [{:keys [entries meta]}]
+  (build-dataset meta (map compact-entry->entry entries)))
+
+(defn exact-char [dataset value]
+  (get (:entry-by-char dataset) value))
 
 (defn normalize-query [value]
   (let [trimmed (str/trim (or value ""))]
@@ -143,49 +173,21 @@
           (when (seq acc)
             (apply str acc)))))))
 
-(defn- code-query? [value]
-  (boolean (normalize-query value)))
-
-(defn matches-for-prefix [prefix]
+(defn matches-for-prefix [dataset prefix]
   (let [normalized (normalize-query prefix)
         actual-prefix (or normalized "")]
-    (->> entries
+    (->> (:entries dataset)
          (filter #(str/starts-with? (:code %) actual-prefix))
-         (sort-by (juxt :code :char))
          vec)))
 
-(defn next-step-groups [prefix]
-  (let [matches (matches-for-prefix prefix)
-        prefix-length (count (or (normalize-query prefix) ""))]
-    (->> matches
-         (keep (fn [{:keys [code] :as entry}]
-                 (when (> (count code) prefix-length)
-                   (let [next-letter (subs code prefix-length (inc prefix-length))
-                         root (get root-by-letter next-letter)]
-                     {:letter next-letter
-                      :glyph (:glyph root)
-                      :family (:family root)
-                      :hint (:hint root)
-                      :examples [(:char entry)]}))))
-         (group-by :letter)
-         (map (fn [[letter items]]
-                (let [root (get root-by-letter letter)]
-                  {:letter letter
-                   :glyph (:glyph root)
-                   :family (:family root)
-                   :hint (:hint root)
-                   :count (count items)
-                   :examples (->> items (mapcat :examples) distinct (take 4) vec)
-                   :prefix (str (or (normalize-query prefix) "") letter)})))
-         (sort-by (juxt (comp - :count) :letter))
-         vec)))
+(defn next-step-groups [dataset prefix]
+  (get (:prefix-groups dataset) (or (normalize-query prefix) "") []))
 
-(defn node-for-prefix [prefix]
+(defn node-for-prefix [dataset prefix]
   (let [normalized (or (normalize-query prefix) "")]
     {:prefix normalized
-     :path (root-path normalized)
-     :entries (matches-for-prefix normalized)
-     :next-steps (next-step-groups normalized)}))
+     :entries (matches-for-prefix dataset normalized)
+     :next-steps (next-step-groups dataset normalized)}))
 
 (defn path-steps [{:keys [char code roots]}]
   (mapv (fn [index root]
