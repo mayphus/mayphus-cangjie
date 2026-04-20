@@ -179,7 +179,8 @@
      [:path {:class (str "cangjie-tree-edge" (when (:selected? to) " is-active"))
              :d (str "M " (:x from) " " (:y from)
                      " L " (:x to) " " (:y to))}])
-   (for [{:keys [glyph id prefix selected? x y] :as node} nodes]
+   (for [{:keys [glyph id prefix selected? x y] :as node} nodes
+         :when (not (str/blank? prefix))]
      ^{:key id}
      [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
           :transform (str "translate(" x "," y ")")
