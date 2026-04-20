@@ -188,28 +188,16 @@
   (when (and node (= :auto @zoom-mode*))
     (reset! zoom-state* (fit-transform view-box (current-viewport-size node)))))
 
-(defn icicle-note [{:keys [examples]}]
-  (some->> examples
-           seq
-           (take 3)
-           (str/join " · ")))
-
 (defn tree-svg-content [{:keys [nodes on-select transform]}]
    [:g {:transform transform}
    (for [{:keys [glyph height id prefix selected? width x y] :as node} nodes
          :when (not (str/blank? prefix))
-         :let [note (icicle-note node)
-               roomy? (and (> width 72) (> height 54))
-               noteable? (and note (> width 48) (> height 40))
+         :let [roomy? (and (> width 72) (> height 54))
                label-x (+ x (if roomy? 12 (/ width 2)))
-               glyph-y (+ y (if noteable? 34 (/ height 2)))
-               note-x (+ x (if roomy? 12 (/ width 2)))
-               note-y (+ y 64)]]
+               glyph-y (+ y (/ height 2))]]
      ^{:key id}
      [:g {:class (str "cangjie-icicle-node" (if selected? " is-active" " is-muted"))
           :on-click #(when prefix (on-select node))}
-      (when note
-        [:title note])
       [:rect {:class "cangjie-icicle-rect"
               :x x
               :y y
@@ -223,14 +211,7 @@
                 :y glyph-y
                 :text-anchor (if roomy? "start" "middle")
                 :dominant-baseline "central"}
-         glyph])
-      (when noteable?
-        [:text {:class "cangjie-icicle-note"
-                :x note-x
-                :y note-y
-                :text-anchor (if roomy? "start" "middle")
-                :dominant-baseline "central"}
-         note])])])
+         glyph])])])
 
 (defn interactive-tree-svg [{:keys [nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
   (let [svg-node* (atom nil)
@@ -322,13 +303,17 @@
                              (take 6 (:entries dataset)))
         active-entry (or exact-entry (first featured-entries))
         matches (when-not (str/blank? effective-prefix)
-                  (cangjie/matches-for-prefix dataset effective-prefix))]
+                  (cangjie/matches-for-prefix dataset effective-prefix))
+        exact-matches (when-not (str/blank? effective-prefix)
+                        (->> matches
+                             (filter #(= (:code %) effective-prefix))
+                             vec))]
     {:dataset dataset
      :exact-entry exact-entry
      :active-entry active-entry
      :effective-prefix effective-prefix
      :featured-entries featured-entries
-     :matches matches
+     :matches exact-matches
      :locale locale
      :expanded-prefixes (into (or expanded-prefixes #{""})
                               (path-prefixes effective-prefix))
@@ -362,7 +347,7 @@
   (let [candidates (->> matches
                         (take 18)
                         vec)]
-    (when (> (count candidates) 1)
+    (when (seq candidates)
       [:div {:class "cangjie-candidate-strip"}
        [:div {:class "cangjie-candidate-row"}
         (for [{:keys [char code] :as entry} candidates]
