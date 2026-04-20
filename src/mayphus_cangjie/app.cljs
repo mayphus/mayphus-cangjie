@@ -189,16 +189,22 @@
     (reset! zoom-state* (fit-transform view-box (current-viewport-size node)))))
 
 (defn icicle-note [{:keys [examples]}]
-  (some->> examples seq (str/join " · ")))
+  (some->> examples
+           seq
+           (take 3)
+           (str/join " · ")))
 
 (defn tree-svg-content [{:keys [nodes on-select transform]}]
-  [:g {:transform transform}
+   [:g {:transform transform}
    (for [{:keys [glyph height id prefix selected? width x y] :as node} nodes
          :when (not (str/blank? prefix))
          :let [note (icicle-note node)
-               roomy? (and (> width 88) (> height 44))
+               roomy? (and (> width 72) (> height 54))
+               noteable? (and note (> width 48) (> height 40))
                label-x (+ x (if roomy? 12 (/ width 2)))
-               glyph-y (+ y (if roomy? 28 (/ height 2)))]]
+               glyph-y (+ y (if noteable? 34 (/ height 2)))
+               note-x (+ x (if roomy? 12 (/ width 2)))
+               note-y (+ y 64)]]
      ^{:key id}
      [:g {:class (str "cangjie-icicle-node" (if selected? " is-active" " is-muted"))
           :on-click #(when prefix (on-select node))}
@@ -218,11 +224,11 @@
                 :text-anchor (if roomy? "start" "middle")
                 :dominant-baseline "central"}
          glyph])
-      (when (and roomy? note)
+      (when noteable?
         [:text {:class "cangjie-icicle-note"
-                :x label-x
-                :y (+ y 52)
-                :text-anchor "start"
+                :x note-x
+                :y note-y
+                :text-anchor (if roomy? "start" "middle")
                 :dominant-baseline "central"}
          note])])])
 
@@ -356,7 +362,7 @@
   (let [candidates (->> matches
                         (take 18)
                         vec)]
-    (when (seq candidates)
+    (when (> (count candidates) 1)
       [:div {:class "cangjie-candidate-strip"}
        [:div {:class "cangjie-candidate-row"}
         (for [{:keys [char code] :as entry} candidates]

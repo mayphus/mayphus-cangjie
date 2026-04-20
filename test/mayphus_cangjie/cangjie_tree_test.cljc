@@ -19,3 +19,14 @@
     (is (seq (:nodes layout)))
     (is (seq (:edges layout)))
     (is (some #(= "照" (:glyph %)) (:nodes layout)))))
+
+(deftest tree-layout-keeps-ancestor-prefixes-visible
+  (let [dataset @test-support/dataset
+        layout (tree/tree-layout {:dataset dataset
+                                  :entry nil
+                                  :prefix "arf"
+                                  :expanded-prefixes #{"" "a" "ar" "arf"}})
+        prefixes (set (map :prefix (:nodes layout)))]
+    (is (contains? prefixes "a"))
+    (is (contains? prefixes "ar"))
+    (is (contains? prefixes "arf"))))

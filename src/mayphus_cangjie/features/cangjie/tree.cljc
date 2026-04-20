@@ -3,7 +3,7 @@
             [mayphus-cangjie.features.cangjie :as cangjie]))
 
 (def icicle-width 1200)
-(def icicle-row-height 92)
+(def icicle-row-height 112)
 (def icicle-row-gap 8)
 (def icicle-padding 16)
 
@@ -54,6 +54,21 @@
   (mapv #(assoc % :prefix-groups (cangjie/next-step-groups dataset (:prefix %)))
         (cangjie/next-step-groups dataset prefix)))
 
+(defn- option-for-prefix [dataset prefix]
+  (when (seq prefix)
+    (let [parent-prefix (subs prefix 0 (dec (count prefix)))]
+      (or (some #(when (= prefix (:prefix %)) %) (build-prefix-groups dataset parent-prefix))
+          (let [letter (subs prefix (dec (count prefix)))
+                root (get cangjie/root-by-letter letter)]
+            {:letter letter
+             :glyph (:glyph root)
+             :family (:family root)
+             :hint (:hint root)
+             :count 0
+             :examples []
+             :prefix prefix
+             :prefix-groups (cangjie/next-step-groups dataset prefix)})))))
+
 (defn- build-tree-data
   [{:keys [active-code dataset exact-entry expanded-prefixes]}]
   (letfn [(children-for [prefix]
@@ -70,8 +85,19 @@
             (let [node (step-node active-code option)
                   children (children-for (:prefix option))]
               (cond-> node
-                (seq children) (assoc :children children))))]
-    (assoc (root-node) :children (mapv build-node (build-prefix-groups dataset "")))))
+                (seq children) (assoc :children children))))
+          (build-path-node [prefixes]
+            (let [prefix (first prefixes)
+                  option (option-for-prefix dataset prefix)
+                  node (step-node active-code option)]
+              (if-let [next-prefixes (next prefixes)]
+                (assoc node :children [(build-path-node next-prefixes)])
+                (let [children (children-for prefix)]
+                  (cond-> node
+                    (seq children) (assoc :children children))))))]
+    (if (str/blank? active-code)
+      (assoc (root-node) :children (mapv build-node (build-prefix-groups dataset "")))
+      (build-path-node (vec (rest (sort-by count (path-prefixes active-code))))))))
 
 (defn branch-columns [dataset active-code]
   (let [active-code (or active-code "")
@@ -85,52 +111,45 @@
              :options (cangjie/next-step-groups dataset prefix)})
           prefixes)))
 
-(defn- annotate-values [{:keys [children] :as node}]
-  (if (seq children)
-    (let [children* (mapv annotate-values children)
-          total-value (reduce + (map :value children*))]
-      (assoc node
-             :children children*
-             :value (max 1 total-value)))
-    (assoc node :value 1)))
-
 (defn- max-depth [{:keys [children]}]
   (if (seq children)
     (inc (reduce max (map max-depth children)))
     1))
 
 (defn- layout-icicle [root]
-  (let [root* (annotate-values root)
-        nodes* (atom [])
+  (let [nodes* (atom [])
         edges* (atom [])]
-    (letfn [(visit [node depth x0 x1 parent]
+    (letfn [(visit [node visible-depth x0 x1 parent]
               (let [children (:children node)
                     display? (not (str/blank? (:prefix node)))
-                    y (+ icicle-padding (* (max 0 (dec depth)) icicle-row-height))
+                    y (+ icicle-padding (* visible-depth icicle-row-height))
+                    next-visible-depth (if display?
+                                         (inc visible-depth)
+                                         visible-depth)
                     laid-out (assoc node
                                     :x x0
                                     :y y
                                     :width (max 0 (- x1 x0))
                                     :height (- icicle-row-height icicle-row-gap)
-                                    :depth depth)]
+                                    :depth visible-depth)]
                 (when display?
                   (swap! nodes* conj laid-out)
                   (when parent
                     (swap! edges* conj {:from parent :to laid-out})))
                 (when (seq children)
-                  (let [total-value (double (max 1 (:value node)))
+                  (let [child-count (count children)
                         span (- x1 x0)]
                     (loop [remaining children
                            cursor x0]
                       (when-let [child (first remaining)]
                         (let [child-width (if (next remaining)
-                                            (* span (/ (:value child) total-value))
+                                            (/ span child-count)
                                             (- x1 cursor))
                               next-cursor (+ cursor child-width)]
-                          (visit child (inc depth) cursor next-cursor (when display? laid-out))
+                          (visit child next-visible-depth cursor next-cursor (when display? laid-out))
                           (recur (next remaining) next-cursor))))))))]
-      (visit root* 0 icicle-padding (- icicle-width icicle-padding) nil)
-      (let [visible-depth (max 1 (dec (max-depth root*)))]
+      (visit root 0 icicle-padding (- icicle-width icicle-padding) nil)
+      (let [visible-depth (max 1 (dec (max-depth root)))]
         {:view-box {:width icicle-width
                     :height (+ (* 2 icicle-padding)
                                (* visible-depth icicle-row-height))}
