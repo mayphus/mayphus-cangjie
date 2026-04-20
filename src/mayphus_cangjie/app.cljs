@@ -135,9 +135,9 @@
 
 (defn fit-transform [{:keys [height width]}]
   (let [viewport-width (max 960 (min 1240 width))
-        viewport-height (max 460 (min 760 height))
-        scale (max 0.74 (min 1.08 (min (/ (- viewport-width 64) width)
-                                        (/ (- viewport-height 64) height))))
+        viewport-height (max 560 (min 860 height))
+        scale (max 0.72 (min 1.02 (min (/ (- viewport-width 48) width)
+                                        (/ (- viewport-height 48) height))))
         scaled-height (* height scale)
         scaled-width (* width scale)
         translate-x (/ (- viewport-width scaled-width) 2)
@@ -179,43 +179,37 @@
     [(tr locale :start) (tr locale :start-secondary)]
     [glyph (localized-family locale node)]))
 
-(defn tree-svg-content [{:keys [edges locale node-height node-width nodes y-offset on-select transform]}]
+(defn tree-svg-content [{:keys [edges locale nodes on-select transform]}]
   [:g {:transform transform}
    (for [{:keys [from to]} edges]
      ^{:key (str (:id from) "->" (:id to))}
      [:path {:class (str "cangjie-tree-edge" (when (:selected? to) " is-active"))
-             :d (let [from-x (+ (:x from) node-width)
-                      from-y (+ y-offset (:y from) (/ node-height 2))
-                      to-x (:x to)
-                      to-y (+ y-offset (:y to) (/ node-height 2))
-                      mid-x (/ (+ from-x to-x) 2)]
-                  (str "M " from-x " " from-y
-                       " C " mid-x " " from-y
-                       ", " mid-x " " to-y
-                       ", " to-x " " to-y))}])
+             :d (str "M " (:x from) " " (:y from)
+                     " C " (:x from) " " (/ (+ (:y from) (:y to)) 2)
+                     ", " (:x to) " " (/ (+ (:y from) (:y to)) 2)
+                     ", " (:x to) " " (:y to))}])
    (for [{:keys [count id prefix selected? x y] :as node} nodes
          :let [[line-1 line-2] (tree-node-label locale node)]]
      ^{:key id}
      [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
-          :transform (str "translate(" x "," (+ y y-offset) ")")
+          :transform (str "translate(" x "," y ")")
           :on-click #(when prefix (on-select prefix))}
-      [:rect {:class "cangjie-tree-node-frame"
-              :rx "18"
-              :ry "18"
-              :width node-width
-              :height node-height}]
+      [:circle {:class "cangjie-tree-node-frame"
+                :r (if selected? 9 6)}]
       [:text {:class "cangjie-tree-node-line cangjie-tree-node-line-primary"
-              :x (/ node-width 2)
-              :y 20}
+              :x (- (:label-x node) x)
+              :y (- (:label-y node) y 2)
+              :text-anchor (:text-anchor node)}
        line-1]
       [:text {:class "cangjie-tree-node-line cangjie-tree-node-line-secondary"
-              :x (/ node-width 2)
-              :y 38}
+              :x (- (:label-x node) x)
+              :y (- (:label-y node) y -12)
+              :text-anchor (:text-anchor node)}
        (if count
          (str line-2 " · " (format-number locale count) " " (tr locale :count-suffix))
          line-2)]])])
 
-(defn interactive-tree-svg [{:keys [edges locale node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
+(defn interactive-tree-svg [{:keys [edges locale nodes view-box on-select zoom-state* drag-state*]}]
   (let [svg-node* (atom nil)
         wheel-handler* (atom nil)]
     (r/create-class
@@ -234,10 +228,10 @@
           (when-let [wheel-handler @wheel-handler*]
             (.removeEventListener svg-node "wheel" wheel-handler))))
       :reagent-render
-      (fn [{:keys [edges locale node-height node-width nodes view-box y-offset on-select zoom-state* drag-state*]}]
+      (fn [{:keys [edges locale nodes view-box on-select zoom-state* drag-state*]}]
         [:svg {:class "cangjie-tree-svg"
                :ref #(reset! svg-node* %)
-               :viewBox (str "0 0 " (max 960 (:width view-box)) " " (max 460 (min 760 (:height view-box))))
+               :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
                :preserveAspectRatio "xMidYMid meet"
                :on-pointer-down (fn [event]
                                   (when (= 0 (.-button event))
@@ -258,10 +252,7 @@
                :on-pointer-cancel #(reset! drag-state* nil)}
          [tree-svg-content {:edges edges
                             :locale locale
-                            :node-height node-height
-                            :node-width node-width
                             :nodes nodes
-                            :y-offset y-offset
                             :on-select on-select
                             :transform (transform-string @zoom-state*)}]])})))
 
@@ -322,7 +313,7 @@
   (let [{:keys [dataset active-entry effective-prefix locale matches]} (current-view)
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
-        {:keys [edges node-height node-width nodes view-box y-offset]}
+        {:keys [edges nodes view-box]}
         (tree/tree-layout {:dataset dataset
                            :entry active-entry
                            :prefix effective-prefix})
@@ -332,13 +323,10 @@
     [:section {:class "atlas-card atlas-tree-card"}
      [graph-controls locale effective-prefix (count matches)]
      [:div {:class "cangjie-tree-canvas"}
-      [interactive-tree-svg {:edges edges
+     [interactive-tree-svg {:edges edges
                              :locale locale
-                             :node-height node-height
-                             :node-width node-width
                              :nodes nodes
                              :view-box view-box
-                             :y-offset y-offset
                              :on-select #(swap! app-state* assoc
                                                 :selected-prefix (cangjie/normalize-query %)
                                                 :zoom-state nil

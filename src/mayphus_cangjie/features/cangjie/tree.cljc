@@ -1,6 +1,12 @@
 (ns mayphus-cangjie.features.cangjie.tree
   (:require [clojure.string :as str]
-            [mayphus-cangjie.features.cangjie :as cangjie]))
+            [mayphus-cangjie.features.cangjie :as cangjie]
+            #?(:cljs ["d3-hierarchy" :as d3])))
+
+(def radial-radius 300)
+(def radial-center-x 420)
+(def radial-center-y 360)
+(def radial-label-gap 18)
 
 (defn branch-columns [dataset active-code]
   (let [active-code (or active-code "")
@@ -22,113 +28,155 @@
       (and (seq matches) (<= (count matches) 8) (>= (count active-code) 2)) matches
       :else [])))
 
-(def node-width 112)
-(def node-height 42)
-(def x-step 128)
-(def y-step 52)
-(def root-x 32)
-(def spine-y 260)
-(def root-id "root")
-
 (defn root-node []
-  {:id root-id
+  {:id "root"
    :prefix ""
    :glyph "開始"
    :family "起點"
    :count nil
    :selected? true})
 
-(defn- alternating-offsets [count]
-  (take count
-        (mapcat (fn [step] [(- step) step])
-                (iterate inc 1))))
-
-(defn- layout-column [options selected-prefix x]
-  (let [selected-option (some #(when (= (:prefix %) selected-prefix) %) options)
-        anchor-option (or selected-option (first options))
-        sibling-options (remove #(= (:prefix %) (:prefix anchor-option)) options)
-        baseline-y (- spine-y (/ node-height 2))
-        positioned-anchor (assoc anchor-option
-                                 :id (str "step-" (:prefix anchor-option))
-                                 :x x
-                                 :y baseline-y
-                                 :selected? (= (:prefix anchor-option) selected-prefix))
-        positioned-siblings (mapv (fn [offset option]
-                                    (assoc option
-                                           :id (str "step-" (:prefix option))
-                                           :x x
-                                           :y (+ baseline-y (* offset y-step))
-                                           :selected? (= (:prefix option) selected-prefix)))
-                                  (alternating-offsets (count sibling-options))
-                                  sibling-options)]
-    {:nodes (vec (cons positioned-anchor positioned-siblings))
-     :anchor (or (some #(when (:selected? %) %) (cons positioned-anchor positioned-siblings))
-                 positioned-anchor)}))
-
-(defn- layout-leaf-row [leaves active-code x]
-  (when (seq leaves)
-    (let [selected-leaf (some #(when (= (:code %) active-code) %) leaves)
-          anchor-leaf (or selected-leaf (first leaves))
-          sibling-leaves (remove #(= (:code %) (:code anchor-leaf)) leaves)
-          baseline-y (- spine-y (/ node-height 2))
-          positioned-anchor {:id (str "leaf-" (:char anchor-leaf) "-" (:code anchor-leaf))
-                             :prefix (:code anchor-leaf)
-                             :glyph (:char anchor-leaf)
-                             :family "葉節點"
-                             :count nil
-                             :x x
-                             :y baseline-y
-                             :selected? (= (:code anchor-leaf) active-code)}
-          positioned-siblings (mapv (fn [offset {:keys [char code]}]
-                                      {:id (str "leaf-" char "-" code)
-                                       :prefix code
-                                       :glyph char
-                                       :family "葉節點"
-                                       :count nil
-                                       :x x
-                                       :y (+ baseline-y (* offset y-step))
-                                       :selected? (= code active-code)})
-                                    (alternating-offsets (count sibling-leaves))
-                                    sibling-leaves)]
-      (vec (cons positioned-anchor positioned-siblings)))))
-
-(defn tree-layout [{:keys [dataset entry prefix]}]
+(defn manual-tree-layout [{:keys [dataset entry prefix]}]
   (let [active-code (or prefix "")
         columns (branch-columns dataset active-code)
         leaves (leaf-nodes dataset active-code entry)
-        root-node (assoc (root-node) :x root-x :y (- spine-y (/ node-height 2)))]
+        root-node (assoc (root-node) :x 24 :y 220)]
     (loop [remaining columns
            depth 1
            parent-node root-node
            nodes [root-node]
            edges []]
       (if-let [{:keys [options selected-prefix]} (first remaining)]
-        (let [{column-nodes :nodes anchor :anchor} (layout-column options
-                                                                  selected-prefix
-                                                                  (+ 84 (* depth x-step)))
-              next-edges (into edges
-                               (map (fn [node]
-                                      {:from parent-node :to node}))
-                               column-nodes)]
+        (let [count-options (count options)
+              parent-center (+ (:y parent-node) 14)
+              center-index (/ (dec (max count-options 1)) 2)
+              laid-out (mapv (fn [index option]
+                               (let [delta (* (- index center-index) 52)
+                                     y (- (+ parent-center delta) 14)]
+                                 (assoc option
+                                        :id (str "step-" depth "-" (:prefix option))
+                                        :x (+ 110 (* depth 140))
+                                        :y y
+                                        :selected? (= (:prefix option) selected-prefix))))
+                             (range)
+                             options)
+              next-parent (or (first (filter :selected? laid-out))
+                              parent-node)]
           (recur (next remaining)
                  (inc depth)
-                 anchor
-                 (into nodes column-nodes)
-                 next-edges))
-        (let [leaf-nodes (or (layout-leaf-row leaves active-code (+ (:x parent-node) 154))
-                             [])
+                 next-parent
+                 (into nodes laid-out)
+                 (into edges (map (fn [node] {:from parent-node :to node})) laid-out)))
+        (let [leaf-nodes (mapv (fn [index {:keys [char code]}]
+                                 {:id (str "leaf-" char "-" code)
+                                  :prefix code
+                                  :glyph char
+                                  :family "葉節點"
+                                  :count nil
+                                  :x (+ (:x parent-node) 160)
+                                  :y (+ (:y parent-node) (* index 52))
+                                  :selected? (= code active-code)})
+                               (range)
+                               leaves)
               all-nodes (into nodes leaf-nodes)
-              all-edges (into edges
-                              (map (fn [node]
-                                     {:from parent-node :to node}))
-                              leaf-nodes)
-              ys (map :y all-nodes)
-              min-y (- (apply min ys) 72)
-              max-y (+ (apply max ys) 72)]
-          {:node-width node-width
-           :node-height node-height
-           :view-box {:width (+ (apply max (map #(+ (:x %) node-width 40) all-nodes)) 40)
-                      :height (- max-y min-y)}
-           :y-offset (- min-y)
+              all-edges (into edges (map (fn [node] {:from parent-node :to node})) leaf-nodes)]
+          {:view-box {:width 980 :height 720}
+           :y-offset 0
            :nodes all-nodes
            :edges all-edges})))))
+
+(defn- build-tree-data [active-code columns leaves]
+  (letfn [(build-level [remaining depth parent]
+            (if-let [{:keys [options selected-prefix]} (first remaining)]
+              (let [children (mapv (fn [option]
+                                     (let [selected? (= (:prefix option) selected-prefix)
+                                           node {:id (str "step-" depth "-" (:prefix option))
+                                                 :prefix (:prefix option)
+                                                 :glyph (:glyph option)
+                                                 :family (:family option)
+                                                 :count (:count option)
+                                                 :selected? selected?}]
+                                       (if selected?
+                                         (assoc node :children [])
+                                         node)))
+                                   options)
+                    selected-node (some #(when (:selected? %) %) children)
+                    nested-selected (when selected-node
+                                      (build-level (next remaining) (inc depth) selected-node))
+                    rewritten-children (if nested-selected
+                                         (mapv (fn [child]
+                                                 (if (= (:id child) (:id nested-selected))
+                                                   nested-selected
+                                                   child))
+                                               children)
+                                         children)]
+                (assoc parent :children rewritten-children))
+              (let [leaf-children (mapv (fn [{:keys [char code]}]
+                                          {:id (str "leaf-" char "-" code)
+                                           :prefix code
+                                           :glyph char
+                                           :family "葉節點"
+                                           :count nil
+                                           :selected? (= code active-code)})
+                                        leaves)]
+                (assoc parent :children leaf-children))))]
+    (build-level columns 1 (root-node))))
+
+#?(:cljs
+   (defn- js-call [obj method]
+     (js* "(~{}[~{}]).call(~{})" obj method obj)))
+
+#?(:cljs
+   (defn- radial-point [angle radius]
+     (let [adjusted-angle (- angle (/ js/Math.PI 2))]
+       {:x (+ radial-center-x (* radius (js/Math.cos adjusted-angle)))
+        :y (+ radial-center-y (* radius (js/Math.sin adjusted-angle)))})))
+
+#?(:cljs
+   (defn- radial-tree-layout [{:keys [dataset entry prefix]}]
+     (let [active-code (or prefix "")
+           columns (branch-columns dataset active-code)
+           leaves (leaf-nodes dataset active-code entry)
+           tree-data (clj->js (build-tree-data active-code columns leaves))
+           hierarchy (.hierarchy d3 tree-data)
+           max-depth (max 1 (apply max (map #(.-depth %) (array-seq (js-call hierarchy "descendants")))))
+           layout (doto (.tree d3)
+                    (.size #js [(* 2 js/Math.PI) radial-radius])
+                    (.separation (fn [a b]
+                                   (/ (if (= (.-parent a) (.-parent b)) 1 2)
+                                      (max 1 (.-depth a))))))
+           laid-out-hierarchy (layout hierarchy)
+           descendants (array-seq (js-call laid-out-hierarchy "descendants"))
+           nodes (mapv (fn [node]
+                         (let [data (js->clj (.-data node) :keywordize-keys true)
+                               point (radial-point (.-x node) (.-y node))
+                               label-point (radial-point (.-x node) (+ (.-y node) radial-label-gap))
+                               outward-right? (< (.-x node) js/Math.PI)]
+                           (assoc data
+                                  :x (:x point)
+                                  :y (:y point)
+                                  :angle (.-x node)
+                                  :radius (.-y node)
+                                  :label-x (:x label-point)
+                                  :label-y (:y label-point)
+                                  :text-anchor (if outward-right? "start" "end")
+                                  :label-rotate (if outward-right?
+                                                  0
+                                                  180))))
+                       descendants)
+           nodes-by-id (into {} (map (juxt :id identity) nodes))
+           edges (mapv (fn [link]
+                         (let [source-id (.. link -source -data -id)
+                               target-id (.. link -target -data -id)]
+                           {:from (get nodes-by-id source-id)
+                            :to (get nodes-by-id target-id)}))
+                       (array-seq (js-call laid-out-hierarchy "links")))]
+       {:view-box {:width 840
+                   :height 720}
+        :y-offset 0
+        :nodes nodes
+        :edges edges})))
+
+(defn tree-layout [{:keys [dataset entry prefix] :as opts}]
+  #?(:cljs (radial-tree-layout opts)
+     :clj (manual-tree-layout opts)))
