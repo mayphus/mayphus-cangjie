@@ -17,7 +17,7 @@
         :search-label "Search character or code"
         :search-placeholder "For example: 照 / arf / 日口火 / 問"
         :search-help "Supports characters, letter codes, and root aliases."
-        :graph-hint "Drag to move, scroll to zoom, and click a node to follow that code path."
+        :graph-hint "Drag to move, scroll to zoom, and click a node to expand or collapse its children."
         :graph-root "Showing the first layer of root branches."
         :graph-prefix "Prefix %s · %s matches"
         :button-fit "Fit"
@@ -73,7 +73,7 @@
              :search-label "查詢字或字碼"
              :search-placeholder "例如：照 / arf / 日口火 / 問"
              :search-help "支援單字、英文字碼與字根別名。"
-             :graph-hint "拖曳移動，滾輪縮放，點節點可直接沿著字碼往下走。"
+             :graph-hint "拖曳移動，滾輪縮放，點節點可展開或收合下一層分支。"
              :graph-root "目前顯示第一層部件分支。"
              :graph-prefix "前綴 %s · %s 個符合字"
              :button-fit "適中"
@@ -108,6 +108,7 @@
            :locale (detect-locale)
            :raw-query ""
            :selected-prefix nil
+           :expanded-prefixes #{""}
            :zoom-state nil
            :drag-state nil}))
 
@@ -124,6 +125,11 @@
             (str/replace-first result "%s" (str value)))
           template
           values))
+
+(defn path-prefixes [prefix]
+  (into #{""}
+        (map #(subs prefix 0 %))
+        (range 1 (inc (count (or prefix ""))))))
 
 (defn default-zoom-state []
   {:x 0
@@ -166,20 +172,7 @@
   {:x (- (.-clientX event) (:x last-point))
    :y (- (.-clientY event) (:y last-point))})
 
-(defn localized-family [locale {:keys [family glyph prefix]}]
-  (cond
-    (#{"開始" "起點"} glyph) (tr locale :start-secondary)
-    (= family "葉節點") (tr locale :leaf)
-    (= locale :en) (or (get-in translations [:en :root-families (some-> prefix seq last str)])
-                       family)
-    :else family))
-
-(defn tree-node-label [locale {:keys [glyph] :as node}]
-  (if (#{"開始" "起點"} glyph)
-    [(tr locale :start) (tr locale :start-secondary)]
-    [glyph (localized-family locale node)]))
-
-(defn tree-svg-content [{:keys [edges locale nodes on-select transform]}]
+(defn tree-svg-content [{:keys [edges nodes on-select transform]}]
   [:g {:transform transform}
    (for [{:keys [from to]} edges]
      ^{:key (str (:id from) "->" (:id to))}
@@ -188,26 +181,18 @@
                      " C " (:x from) " " (/ (+ (:y from) (:y to)) 2)
                      ", " (:x to) " " (/ (+ (:y from) (:y to)) 2)
                      ", " (:x to) " " (:y to))}])
-   (for [{:keys [count id prefix selected? x y] :as node} nodes
-         :let [[line-1 line-2] (tree-node-label locale node)]]
+   (for [{:keys [glyph id prefix selected? x y] :as node} nodes]
      ^{:key id}
      [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
           :transform (str "translate(" x "," y ")")
-          :on-click #(when prefix (on-select prefix))}
+          :on-click #(when prefix (on-select node))}
       [:circle {:class "cangjie-tree-node-frame"
                 :r (if selected? 9 6)}]
       [:text {:class "cangjie-tree-node-line cangjie-tree-node-line-primary"
               :x (- (:label-x node) x)
-              :y (- (:label-y node) y 2)
+              :y (- (:label-y node) y)
               :text-anchor (:text-anchor node)}
-       line-1]
-      [:text {:class "cangjie-tree-node-line cangjie-tree-node-line-secondary"
-              :x (- (:label-x node) x)
-              :y (- (:label-y node) y -12)
-              :text-anchor (:text-anchor node)}
-       (if count
-         (str line-2 " · " (format-number locale count) " " (tr locale :count-suffix))
-         line-2)]])])
+       glyph]])])
 
 (defn interactive-tree-svg [{:keys [edges locale nodes view-box on-select zoom-state* drag-state*]}]
   (let [svg-node* (atom nil)
@@ -234,10 +219,12 @@
                :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
                :preserveAspectRatio "xMidYMid meet"
                :on-pointer-down (fn [event]
-                                  (when (= 0 (.-button event))
+                                  (let [node-target (.closest (.-target event) ".cangjie-tree-visual-node")]
+                                    (when (and (= 0 (.-button event))
+                                               (nil? node-target))
                                     (.setPointerCapture (.-currentTarget event) (.-pointerId event))
                                     (reset! drag-state* {:x (.-clientX event)
-                                                         :y (.-clientY event)})))
+                                                         :y (.-clientY event)}))))
                :on-pointer-move (fn [event]
                                   (when-let [last-point @drag-state*]
                                     (let [{:keys [x y]} (drag-delta event last-point)]
@@ -251,7 +238,6 @@
                                   (reset! drag-state* nil)))
                :on-pointer-cancel #(reset! drag-state* nil)}
          [tree-svg-content {:edges edges
-                            :locale locale
                             :nodes nodes
                             :on-select on-select
                             :transform (transform-string @zoom-state*)}]])})))
@@ -260,11 +246,12 @@
   (swap! app-state* assoc
          :raw-query (:char entry)
          :selected-prefix (:code entry)
+         :expanded-prefixes (path-prefixes (:code entry))
          :zoom-state nil
          :drag-state nil))
 
 (defn current-view []
-  (let [{:keys [dataset raw-query selected-prefix locale]} @app-state*
+  (let [{:keys [dataset expanded-prefixes raw-query selected-prefix locale]} @app-state*
         trimmed (str/trim raw-query)
         normalized (cangjie/normalize-query trimmed)
         exact-entry (when-not normalized
@@ -285,6 +272,8 @@
      :featured-entries featured-entries
      :matches matches
      :locale locale
+     :expanded-prefixes (into (or expanded-prefixes #{""})
+                              (path-prefixes effective-prefix))
      :raw-query raw-query}))
 
 (defn graph-controls [locale prefix match-count]
@@ -309,28 +298,45 @@
                                 :drag-state nil)}
      (tr locale :button-reset)]]])
 
+(defn collapse-prefixes [expanded-prefixes prefix]
+  (into #{""}
+        (remove #(and (not= % "") (str/starts-with? % prefix)))
+        expanded-prefixes))
+
+(defn toggle-node! [{:keys [expandable? prefix]}]
+  (swap! app-state*
+         (fn [state]
+           (let [expanded-prefixes (or (:expanded-prefixes state) #{""})
+                 next-expanded (cond
+                                 (not expandable?) expanded-prefixes
+                                 (contains? expanded-prefixes prefix) (collapse-prefixes expanded-prefixes prefix)
+                                 :else (conj expanded-prefixes prefix))]
+             (assoc state
+                    :selected-prefix prefix
+                    :expanded-prefixes next-expanded
+                    :zoom-state nil
+                    :drag-state nil)))))
+
 (defn tree-panel []
-  (let [{:keys [dataset active-entry effective-prefix locale matches]} (current-view)
+  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale matches]} (current-view)
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
         {:keys [edges nodes view-box]}
         (tree/tree-layout {:dataset dataset
                            :entry active-entry
-                           :prefix effective-prefix})
+                           :prefix effective-prefix
+                           :expanded-prefixes expanded-prefixes})
         zoom-state (or @zoom-state* (fit-transform view-box))]
     (when (nil? @zoom-state*)
       (reset! zoom-state* zoom-state))
     [:section {:class "atlas-card atlas-tree-card"}
      [graph-controls locale effective-prefix (count matches)]
      [:div {:class "cangjie-tree-canvas"}
-     [interactive-tree-svg {:edges edges
+      [interactive-tree-svg {:edges edges
                              :locale locale
                              :nodes nodes
                              :view-box view-box
-                             :on-select #(swap! app-state* assoc
-                                                :selected-prefix (cangjie/normalize-query %)
-                                                :zoom-state nil
-                                                :drag-state nil)
+                             :on-select toggle-node!
                              :zoom-state* zoom-state*
                              :drag-state* drag-state*}]]]))
 
@@ -402,6 +408,7 @@
                  :on-change #(swap! app-state* assoc
                                     :raw-query (.. % -target -value)
                                     :selected-prefix nil
+                                    :expanded-prefixes #{""}
                                     :zoom-state nil
                                     :drag-state nil)}]]
        [:p {:class "landing-meta"}

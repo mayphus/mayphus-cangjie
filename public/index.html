@@ -299,18 +299,18 @@
 
       .cangjie-tree-edge {
         fill: none;
-        stroke: rgba(125, 90, 55, 0.16);
-        stroke-width: 1.2;
+        stroke: rgba(125, 90, 55, 0.08);
+        stroke-width: 1.05;
       }
 
       .cangjie-tree-edge.is-active {
         stroke: var(--accent);
-        stroke-width: 2.1;
+        stroke-width: 2.3;
       }
 
       .cangjie-tree-visual-node {
         cursor: pointer;
-        opacity: 0.34;
+        opacity: 0.16;
         transition: opacity 120ms ease;
       }
 
@@ -320,8 +320,8 @@
 
       .cangjie-tree-node-frame {
         fill: var(--panel);
-        stroke: var(--line);
-        stroke-width: 1.4;
+        stroke: rgba(125, 90, 55, 0.22);
+        stroke-width: 1.2;
       }
 
       .cangjie-tree-visual-node.is-active .cangjie-tree-node-frame {
@@ -331,7 +331,7 @@
       }
 
       .cangjie-tree-visual-node:hover {
-        opacity: 0.78;
+        opacity: 0.42;
       }
 
       .cangjie-tree-visual-node.is-active:hover {
@@ -346,11 +346,7 @@
       .cangjie-tree-node-line-primary {
         font-size: 0.92rem;
         font-weight: 700;
-      }
-
-      .cangjie-tree-node-line-secondary {
-        font-size: 0.74rem;
-        fill: var(--muted);
+        letter-spacing: 0.02em;
       }
 
       .atlas-footer {
