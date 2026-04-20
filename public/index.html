@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>倉頡樹圖</title>
+    <meta
+      name="description"
+      content="用字根樹圖查詢倉頡碼，沿著每一步分支理解字是如何被輸入法定位出來的。"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg-top: #f4ede4;
+        --bg-bottom: #f8f7f2;
+        --panel: rgba(255, 252, 246, 0.92);
+        --panel-strong: rgba(255, 249, 240, 0.98);
+        --line: rgba(87, 66, 42, 0.18);
+        --line-strong: rgba(115, 84, 46, 0.32);
+        --text: #2f2418;
+        --muted: #6d5a48;
+        --accent: #8f4f21;
+        --accent-soft: rgba(143, 79, 33, 0.12);
+        --shadow: 0 28px 90px rgba(63, 44, 24, 0.12);
+        --radius-xl: 30px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #app {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at top, rgba(194, 137, 75, 0.18), transparent 34%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+        color: var(--text);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .app-shell {
+        width: min(1180px, calc(100vw - 28px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .site-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+        margin-bottom: 24px;
+      }
+
+      .brand-block {
+        display: grid;
+        gap: 10px;
+      }
+
+      .brand-kicker,
+      .eyebrow {
+        margin: 0;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .brand-title,
+      .page-title {
+        margin: 0;
+        font-size: clamp(2.8rem, 8vw, 5.6rem);
+        line-height: 0.92;
+        font-weight: 700;
+      }
+
+      .brand-summary,
+      .page-description,
+      .cangjie-section-copy,
+      .cangjie-graph-hint {
+        margin: 0;
+        max-width: 64ch;
+        font-size: 1rem;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .site-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.85rem 1.05rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 253, 249, 0.8);
+        text-decoration: none;
+      }
+
+      .cangjie-shell {
+        display: grid;
+        gap: 18px;
+      }
+
+      .cangjie-hero-card,
+      .cangjie-tree-card {
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .cangjie-hero-card {
+        background:
+          linear-gradient(135deg, rgba(255, 250, 242, 0.98), rgba(250, 245, 235, 0.94)),
+          var(--panel-strong);
+      }
+
+      .cangjie-hero-copy,
+      .cangjie-section-head,
+      .cangjie-search {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .cangjie-search-label {
+        font-size: 0.88rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .cangjie-search-input {
+        width: 100%;
+        min-height: 58px;
+        padding: 0 18px;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.82);
+        font: inherit;
+        font-size: 1.05rem;
+        color: var(--text);
+      }
+
+      .cangjie-search-input:focus {
+        outline: 2px solid rgba(143, 79, 33, 0.18);
+        border-color: rgba(143, 79, 33, 0.45);
+      }
+
+      .rime-section-title {
+        margin: 0;
+        font-size: 1.45rem;
+      }
+
+      .cangjie-graph-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-top: 18px;
+        margin-bottom: 18px;
+      }
+
+      .cangjie-graph-actions {
+        display: inline-flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .cangjie-graph-button {
+        min-height: 42px;
+        padding: 0 16px;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        background: #fffaf2;
+        font: inherit;
+        font-size: 0.94rem;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+
+      .cangjie-graph-button:hover {
+        background: #f6ead8;
+        transform: translateY(-1px);
+      }
+
+      .cangjie-tree-canvas {
+        overflow: hidden;
+        border: 1px solid rgba(87, 66, 42, 0.12);
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at top, rgba(143, 79, 33, 0.08), transparent 38%),
+          linear-gradient(180deg, rgba(255, 252, 248, 0.96), rgba(247, 241, 232, 0.94));
+      }
+
+      .cangjie-tree-svg {
+        display: block;
+        width: 100%;
+        min-height: 420px;
+        touch-action: none;
+      }
+
+      .cangjie-tree-edge {
+        fill: none;
+        stroke: rgba(125, 90, 55, 0.4);
+        stroke-width: 2;
+      }
+
+      .cangjie-tree-visual-node {
+        cursor: pointer;
+      }
+
+      .cangjie-tree-node-frame {
+        fill: rgba(255, 252, 247, 0.94);
+        stroke: rgba(118, 82, 50, 0.28);
+        stroke-width: 1.4;
+      }
+
+      .cangjie-tree-visual-node.is-active .cangjie-tree-node-frame {
+        fill: rgba(255, 242, 224, 0.98);
+        stroke: rgba(143, 79, 33, 0.72);
+        stroke-width: 2;
+      }
+
+      .cangjie-tree-node-line {
+        fill: var(--text);
+        text-anchor: middle;
+        pointer-events: none;
+      }
+
+      .cangjie-tree-node-line-primary {
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .cangjie-tree-node-line-secondary {
+        font-size: 0.8rem;
+        fill: var(--muted);
+      }
+
+      @media (max-width: 800px) {
+        .app-shell {
+          width: min(100vw - 20px, 1180px);
+          padding-top: 20px;
+          padding-bottom: 40px;
+        }
+
+        .site-head,
+        .cangjie-graph-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .cangjie-hero-card,
+        .cangjie-tree-card {
+          padding: 18px;
+          border-radius: 22px;
+        }
+
+        .brand-title,
+        .page-title {
+          font-size: clamp(2.2rem, 12vw, 3.5rem);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

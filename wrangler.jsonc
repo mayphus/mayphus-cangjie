@@ -1,0 +1,29 @@
+{
+  "name": "mayphus-cangjie",
+  "compatibility_date": "2026-04-20",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "html_handling": "drop-trailing-slash"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [
+    {
+      "pattern": "cangjie.mayphus.org",
+      "custom_domain": true
+    }
+  ],
+  "env": {
+    "preview": {
+      "name": "mayphus-cangjie-preview",
+      "routes": [],
+      "workers_dev": true
+    },
+    "production": {
+      "name": "mayphus-cangjie"
+    }
+  }
+}

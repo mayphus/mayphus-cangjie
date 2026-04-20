@@ -1,0 +1,20 @@
+{
+  "name": "@mayphus/mayphus-cangjie",
+  "private": true,
+  "packageManager": "bun@1.3.6",
+  "type": "module",
+  "scripts": {
+    "dev": "rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow watch app",
+    "build": "rm -rf dist && mkdir -p dist && cp -R public/. dist && clojure -M:shadow release app",
+    "test": "clojure -M:test"
+  },
+  "dependencies": {
+    "d3-hierarchy": "^3.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "scheduler": "^0.23.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.75.0"
+  }
+}
