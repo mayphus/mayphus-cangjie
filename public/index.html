@@ -318,16 +318,8 @@
         opacity: 1;
       }
 
-      .cangjie-tree-node-frame {
-        fill: var(--panel);
-        stroke: rgba(125, 90, 55, 0.22);
-        stroke-width: 1.2;
-      }
-
-      .cangjie-tree-visual-node.is-active .cangjie-tree-node-frame {
-        fill: var(--panel-strong);
-        stroke: var(--accent);
-        stroke-width: 2.2;
+      .cangjie-tree-node-hitbox {
+        fill: transparent;
       }
 
       .cangjie-tree-visual-node:hover {
@@ -338,15 +330,17 @@
         opacity: 1;
       }
 
-      .cangjie-tree-node-line {
+      .cangjie-tree-node-glyph {
         fill: var(--text);
         pointer-events: none;
-      }
-
-      .cangjie-tree-node-line-primary {
-        font-size: 0.92rem;
+        font-size: 1rem;
         font-weight: 700;
         letter-spacing: 0.02em;
+      }
+
+      .cangjie-tree-visual-node.is-active .cangjie-tree-node-glyph {
+        fill: var(--accent);
+        font-size: 1.08rem;
       }
 
       .atlas-footer {

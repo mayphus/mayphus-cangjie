@@ -178,20 +178,17 @@
      ^{:key (str (:id from) "->" (:id to))}
      [:path {:class (str "cangjie-tree-edge" (when (:selected? to) " is-active"))
              :d (str "M " (:x from) " " (:y from)
-                     " C " (:x from) " " (/ (+ (:y from) (:y to)) 2)
-                     ", " (:x to) " " (/ (+ (:y from) (:y to)) 2)
-                     ", " (:x to) " " (:y to))}])
+                     " L " (:x to) " " (:y to))}])
    (for [{:keys [glyph id prefix selected? x y] :as node} nodes]
      ^{:key id}
      [:g {:class (str "cangjie-tree-visual-node" (when selected? " is-active"))
           :transform (str "translate(" x "," y ")")
           :on-click #(when prefix (on-select node))}
-      [:circle {:class "cangjie-tree-node-frame"
-                :r (if selected? 9 6)}]
-      [:text {:class "cangjie-tree-node-line cangjie-tree-node-line-primary"
-              :x (- (:label-x node) x)
-              :y (- (:label-y node) y)
-              :text-anchor (:text-anchor node)}
+      [:circle {:class "cangjie-tree-node-hitbox"
+                :r (if selected? 16 13)}]
+      [:text {:class "cangjie-tree-node-glyph"
+              :text-anchor "middle"
+              :dominant-baseline "central"}
        glyph]])])
 
 (defn interactive-tree-svg [{:keys [edges locale nodes view-box on-select zoom-state* drag-state*]}]
