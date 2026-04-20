@@ -5,7 +5,7 @@
 (def icicle-width 1200)
 (def icicle-row-height 112)
 (def icicle-row-gap 8)
-(def icicle-padding 16)
+(def icicle-padding 0)
 
 (defn path-prefixes [prefix]
   (into #{""}

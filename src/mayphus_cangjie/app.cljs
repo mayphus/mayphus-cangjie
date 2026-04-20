@@ -150,8 +150,8 @@
         viewport-height (or viewport-height
                             height
                             (max 560 (min 860 height)))
-        scale (max 0.72 (min 1.02 (min (/ (- viewport-width 48) width)
-                                        (/ (- viewport-height 48) height))))
+        scale (max 0.72 (min 1.02 (min (/ (- viewport-width 8) width)
+                                        (/ (- viewport-height 8) height))))
         scaled-height (* height scale)
         scaled-width (* width scale)
         translate-x (/ (- viewport-width scaled-width) 2)
