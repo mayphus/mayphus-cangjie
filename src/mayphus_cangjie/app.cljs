@@ -363,6 +363,7 @@
     (when (nil? @zoom-state*)
       (reset! zoom-state* zoom-state))
     [:section {:class "atlas-card atlas-tree-card"}
+     [candidate-strip locale matches active-entry]
      [:div {:class "cangjie-tree-canvas"}
       [interactive-tree-svg {:edges edges
                              :locale locale
@@ -372,8 +373,7 @@
                              :zoom-mode* zoom-mode*
                              :zoom-state* zoom-state*
                              :drag-state* drag-state*
-                             :auto-fit-key auto-fit-key}]]
-     [candidate-strip locale matches active-entry]]))
+                             :auto-fit-key auto-fit-key}]]]))
 
 (defn footer-panel []
   (let [{:keys [locale]} @app-state*

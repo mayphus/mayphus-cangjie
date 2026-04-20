@@ -243,23 +243,23 @@
       }
 
       .cangjie-candidate-strip {
-        margin-top: 0.75rem;
-        padding-top: 0.7rem;
-        border-top: 1px solid var(--line);
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.7rem;
+        border-bottom: 1px solid var(--line);
       }
 
       .cangjie-candidate-row {
-        display: flex;
+        display: grid;
         gap: 0.45rem;
-        overflow-x: auto;
-        padding-bottom: 0.2rem;
+        grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
       }
 
       .cangjie-candidate {
         display: inline-flex;
         align-items: baseline;
+        justify-content: center;
         gap: 0.4rem;
-        flex: 0 0 auto;
+        width: 100%;
         min-height: 2.2rem;
         padding: 0 0.7rem;
         border: 1px solid var(--line);
@@ -288,6 +288,7 @@
         font-size: 0.74rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
+        white-space: nowrap;
       }
 
       .cangjie-tree-svg {
