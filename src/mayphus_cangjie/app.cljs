@@ -274,28 +274,6 @@
                               (path-prefixes effective-prefix))
      :raw-query raw-query}))
 
-(defn graph-controls [locale prefix match-count]
-  [:div {:class "cangjie-graph-toolbar"}
-   [:div {:class "cangjie-graph-copy"}
-    [:p {:class "cangjie-graph-hint"} (tr locale :graph-hint)]
-    [:p {:class "cangjie-graph-meta"}
-     (if (str/blank? prefix)
-       (tr locale :graph-root)
-       (tformat (tr locale :graph-prefix)
-                (str/upper-case prefix)
-                (format-number locale match-count)))]]
-   [:div {:class "cangjie-graph-actions"}
-    [:button {:class "cangjie-graph-button"
-              :type "button"
-              :on-click #(swap! app-state* assoc :zoom-state nil :drag-state nil)}
-     (tr locale :button-fit)]
-    [:button {:class "cangjie-graph-button"
-              :type "button"
-              :on-click #(swap! app-state* assoc
-                                :zoom-state (default-zoom-state)
-                                :drag-state nil)}
-     (tr locale :button-reset)]]])
-
 (defn collapse-prefixes [expanded-prefixes prefix]
   (into #{""}
         (remove #(and (not= % "") (str/starts-with? % prefix)))
@@ -316,7 +294,7 @@
                     :drag-state nil)))))
 
 (defn tree-panel []
-  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale matches]} (current-view)
+  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale]} (current-view)
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
         {:keys [edges nodes view-box]}
@@ -328,7 +306,6 @@
     (when (nil? @zoom-state*)
       (reset! zoom-state* zoom-state))
     [:section {:class "atlas-card atlas-tree-card"}
-     [graph-controls locale effective-prefix (count matches)]
      [:div {:class "cangjie-tree-canvas"}
       [interactive-tree-svg {:edges edges
                              :locale locale
@@ -358,7 +335,7 @@
       "mayphus.org"]]))
 
 (defn ready-page []
-  (let [{:keys [dataset locale raw-query]} @app-state*]
+  (let [{:keys [dataset locale]} @app-state*]
     [:div {:class "page landing-page"}
      [:header {:class "landing-header"}
       [:div {:class "landing-header-row"}
@@ -366,7 +343,7 @@
             :href "https://mayphus.org/"
             :rel "noreferrer"
             :target "_blank"}
-       "Mayphus"]
+        "Mayphus"]
        [:nav {:class "landing-nav"}
         [:a {:href "https://mayphus.org/"
              :rel "noreferrer"
@@ -384,33 +361,7 @@
          [:button {:class (str "locale-button" (when (= locale :zh-Hant) " is-active"))
                    :type "button"
                    :on-click #(swap! app-state* assoc :locale :zh-Hant)}
-          (tr locale :locale-zh)]]]]
-      [:div {:class "landing-copy"}
-       [:p {:class "eyebrow"} (tr locale :tool-kicker)]
-       [:h1 {:class "landing-title"} (tr locale :page-title)]
-       [:p {:class "landing-lead"}
-        (tr locale :lead)]
-       [:p {:class "landing-meta"}
-        (tformat (tr locale :entry-count)
-                 (format-number locale (or (get-in dataset [:meta :entry-count])
-                                           (count (:entries dataset)))))]]
-      [:div {:class "tool-search-block"}
-       [:label {:class "cangjie-search"}
-        [:span {:class "cangjie-search-label"} (tr locale :search-label)]
-        [:input {:class "cangjie-search-input"
-                 :id "cangjie-query"
-                 :name "cangjie-query"
-                 :type "text"
-                 :placeholder (tr locale :search-placeholder)
-                 :value raw-query
-                 :on-change #(swap! app-state* assoc
-                                    :raw-query (.. % -target -value)
-                                    :selected-prefix nil
-                                    :expanded-prefixes #{""}
-                                    :zoom-state nil
-                                    :drag-state nil)}]]
-       [:p {:class "landing-meta"}
-        (tr locale :search-help)]]]
+          (tr locale :locale-zh)]]]]]
      [:section {:class "home-section tool-chart-section"}
       [tree-panel]]
      [footer-panel]]))

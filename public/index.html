@@ -59,7 +59,6 @@
       }
 
       .landing-header,
-      .landing-copy,
       .tool-search-block,
       .home-section {
         display: flex;
@@ -130,10 +129,6 @@
         color: var(--accent);
       }
 
-      .landing-copy {
-        width: min(100%, 40rem);
-      }
-
       .eyebrow {
         margin: 0;
         font-size: 0.76rem;
@@ -151,8 +146,6 @@
         letter-spacing: -0.03em;
       }
 
-      .cangjie-graph-hint,
-      .cangjie-graph-meta,
       .atlas-footer p,
       .landing-lead,
       .landing-meta {
@@ -239,47 +232,6 @@
 
       .atlas-tree-card {
         padding-top: 0;
-      }
-
-      .cangjie-graph-toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 16px;
-        margin-bottom: 0.85rem;
-        padding-bottom: 0.85rem;
-        border-bottom: 1px solid var(--line);
-      }
-
-      .cangjie-graph-copy {
-        display: grid;
-        gap: 0.35rem;
-      }
-
-      .cangjie-graph-actions {
-        display: inline-flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .cangjie-graph-button {
-        min-height: 36px;
-        padding: 0 12px;
-        border: 1px solid var(--line-strong);
-        border-radius: 999px;
-        background: var(--panel);
-        font: inherit;
-        font-size: 0.9rem;
-        cursor: pointer;
-        transition: color 120ms ease, border-color 120ms ease, transform 160ms ease,
-          background-color 160ms ease;
-      }
-
-      .cangjie-graph-button:hover {
-        color: var(--text);
-        transform: translateY(-0.1rem);
-        border-color: var(--line-strong);
-        background: var(--panel-strong);
       }
 
       .cangjie-tree-canvas {
@@ -369,7 +321,6 @@
         }
 
         .landing-header-row,
-        .cangjie-graph-toolbar,
         .atlas-footer {
           flex-direction: column;
           align-items: flex-start;
