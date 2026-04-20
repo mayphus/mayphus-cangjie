@@ -331,8 +331,25 @@
                     :zoom-state nil
                     :drag-state nil)))))
 
+(defn candidate-strip [locale matches active-entry]
+  (let [candidates (->> matches
+                        (take 18)
+                        vec)]
+    (when (seq candidates)
+      [:div {:class "cangjie-candidate-strip"}
+       [:div {:class "cangjie-candidate-row"}
+        (for [{:keys [char code] :as entry} candidates]
+          ^{:key (str char "-" code)}
+          [:button {:class (str "cangjie-candidate"
+                                (when (= code (:code active-entry)) " is-active"))
+                    :type "button"
+                    :title (str char " " (str/upper-case code))
+                    :on-click #(select-entry! entry)}
+           [:span {:class "cangjie-candidate-char"} char]
+           [:span {:class "cangjie-candidate-code"} (str/upper-case code)]])]])))
+
 (defn tree-panel []
-  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale]} (current-view)
+  (let [{:keys [dataset active-entry effective-prefix expanded-prefixes locale matches]} (current-view)
         zoom-mode* (r/cursor app-state* [:zoom-mode])
         zoom-state* (r/cursor app-state* [:zoom-state])
         drag-state* (r/cursor app-state* [:drag-state])
@@ -355,7 +372,8 @@
                              :zoom-mode* zoom-mode*
                              :zoom-state* zoom-state*
                              :drag-state* drag-state*
-                             :auto-fit-key auto-fit-key}]]]))
+                             :auto-fit-key auto-fit-key}]]
+     [candidate-strip locale matches active-entry]]))
 
 (defn footer-panel []
   (let [{:keys [locale]} @app-state*

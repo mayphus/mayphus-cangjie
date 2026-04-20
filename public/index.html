@@ -242,6 +242,54 @@
         box-shadow: var(--shadow-soft);
       }
 
+      .cangjie-candidate-strip {
+        margin-top: 0.75rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .cangjie-candidate-row {
+        display: flex;
+        gap: 0.45rem;
+        overflow-x: auto;
+        padding-bottom: 0.2rem;
+      }
+
+      .cangjie-candidate {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        flex: 0 0 auto;
+        min-height: 2.2rem;
+        padding: 0 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+        transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+      }
+
+      .cangjie-candidate:hover,
+      .cangjie-candidate.is-active {
+        border-color: var(--line-strong);
+        color: var(--text);
+        background: rgba(109, 75, 62, 0.04);
+      }
+
+      .cangjie-candidate-char {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .cangjie-candidate-code {
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
       .cangjie-tree-svg {
         display: block;
         width: 100%;
