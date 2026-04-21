@@ -48,6 +48,7 @@
    :entries []
    :entry-by-char {}
    :featured-entries []
+   :entries-by-prefix {}
    :prefix-groups {}})
 
 (defn enrich-entry [{:keys [char code weight stem] :as entry}]
@@ -97,6 +98,15 @@
           prefix-groups
           (range 0 (count code))))
 
+(defn- update-entries-by-prefix [entries-by-prefix {:keys [code] :as entry}]
+  (reduce (fn [acc prefix-length]
+            (update acc
+                    (subs code 0 prefix-length)
+                    (fnil conj [])
+                    entry))
+          entries-by-prefix
+          (range 0 (inc (count code)))))
+
 (defn- finalize-prefix-groups [prefix-groups]
   (into {}
         (map (fn [[prefix groups]]
@@ -127,6 +137,9 @@
                                  (update acc (:char entry) choose-better-entry entry))
                                {}
                                prepared-entries)
+         entries-by-prefix (reduce update-entries-by-prefix
+                                   {}
+                                   prepared-entries)
          prefix-groups (->> prepared-entries
                             (reduce update-prefix-groups {})
                             finalize-prefix-groups)
@@ -136,6 +149,7 @@
      {:meta meta
       :entries prepared-entries
       :entry-by-char entry-by-char
+      :entries-by-prefix entries-by-prefix
       :prefix-groups prefix-groups
       :featured-entries featured-entries})))
 
@@ -176,9 +190,7 @@
 (defn matches-for-prefix [dataset prefix]
   (let [normalized (normalize-query prefix)
         actual-prefix (or normalized "")]
-    (->> (:entries dataset)
-         (filter #(str/starts-with? (:code %) actual-prefix))
-         vec)))
+    (get (:entries-by-prefix dataset) actual-prefix [])))
 
 (defn next-step-groups [dataset prefix]
   (get (:prefix-groups dataset) (or (normalize-query prefix) "") []))

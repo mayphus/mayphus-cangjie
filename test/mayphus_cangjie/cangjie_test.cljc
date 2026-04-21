@@ -16,6 +16,8 @@
 
 (deftest prefix-matching
   (let [dataset @test-support/dataset]
+    (is (= (count (:entries dataset))
+           (count (cangjie/matches-for-prefix dataset ""))))
     (is (contains? (set (map :char (cangjie/matches-for-prefix dataset "an"))) "問"))
     (is (contains? (set (map :char (cangjie/matches-for-prefix dataset "an"))) "間"))
     (is (contains? (set (map :char (cangjie/matches-for-prefix dataset "arf"))) "照"))))

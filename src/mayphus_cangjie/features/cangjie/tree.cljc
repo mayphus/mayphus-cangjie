@@ -71,8 +71,15 @@
 
 (defn- build-tree-data
   [{:keys [active-code dataset exact-entry expanded-prefixes]}]
-  (letfn [(children-for [prefix]
-            (let [options (build-prefix-groups dataset prefix)
+  (let [prefix-groups* (atom {})]
+    (letfn [(groups-for [prefix]
+              (if-let [cached (get @prefix-groups* prefix)]
+                cached
+                (let [groups (build-prefix-groups dataset prefix)]
+                  (swap! prefix-groups* assoc prefix groups)
+                  groups)))
+            (children-for [prefix]
+            (let [options (groups-for prefix)
                   expanded? (contains? expanded-prefixes prefix)
                   branch-children (when expanded?
                                     (mapv build-node options))
@@ -95,9 +102,9 @@
                 (let [children (children-for prefix)]
                   (cond-> node
                     (seq children) (assoc :children children))))))]
-    (if (str/blank? active-code)
-      (assoc (root-node) :children (mapv build-node (build-prefix-groups dataset "")))
-      (build-path-node (vec (rest (sort-by count (path-prefixes active-code))))))))
+      (if (str/blank? active-code)
+        (assoc (root-node) :children (mapv build-node (groups-for "")))
+        (build-path-node (vec (rest (sort-by count (path-prefixes active-code)))))))))
 
 (defn branch-columns [dataset active-code]
   (let [active-code (or active-code "")
