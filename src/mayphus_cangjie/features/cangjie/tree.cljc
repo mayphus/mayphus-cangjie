@@ -3,8 +3,8 @@
             [mayphus-cangjie.features.cangjie :as cangjie]))
 
 (def icicle-width 1200)
-(def icicle-row-height 112)
-(def icicle-row-gap 8)
+(def icicle-row-height 92)
+(def icicle-row-gap 18)
 (def icicle-padding 0)
 
 (defn path-prefixes [prefix]
@@ -85,7 +85,9 @@
                                     (mapv build-node options))
                   leaf-children (when expanded?
                                   (let [leaves (leaf-nodes dataset prefix (when (= prefix active-code) exact-entry))]
-                                    (when (and (seq leaves) (empty? options))
+                                    (when (and (seq leaves)
+                                               (empty? options)
+                                               (< (count prefix) 5))
                                       (mapv #(leaf-node active-code %) leaves))))]
               (vec (concat branch-children leaf-children))))
           (build-node [option]

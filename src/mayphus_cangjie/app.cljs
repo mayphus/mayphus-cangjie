@@ -17,7 +17,7 @@
         :search-label "Search character or code"
         :search-placeholder "For example: 照 / arf / 日口火 / 問"
         :search-help "Supports characters, letter codes, and root aliases."
-        :graph-hint "Drag to move, scroll to zoom, and click a node to expand or collapse its children."
+        :graph-hint "Click a node to expand or collapse its children."
         :graph-root "Showing the first layer of root branches."
         :graph-prefix "Prefix %s · %s matches"
         :button-fit "Fit"
@@ -73,7 +73,7 @@
              :search-label "查詢字或字碼"
              :search-placeholder "例如：照 / arf / 日口火 / 問"
              :search-help "支援單字、英文字碼與字根別名。"
-             :graph-hint "拖曳移動，滾輪縮放，點節點可展開或收合下一層分支。"
+             :graph-hint "點節點可展開或收合下一層分支。"
              :graph-root "目前顯示第一層部件分支。"
              :graph-prefix "前綴 %s · %s 個符合字"
              :button-fit "適中"
@@ -108,10 +108,7 @@
            :locale (detect-locale)
            :raw-query ""
            :selected-prefix nil
-           :expanded-prefixes #{""}
-           :zoom-mode :auto
-           :zoom-state nil
-           :drag-state nil}))
+           :expanded-prefixes #{""}}))
 
 (defonce load-started? (atom false))
 
@@ -132,64 +129,8 @@
         (map #(subs prefix 0 %))
         (range 1 (inc (count (or prefix ""))))))
 
-(defn default-zoom-state []
-  {:x 0
-   :y 0
-   :k 1})
-
-(defn transform-string [{:keys [x y k]}]
-  (str "translate(" x "," y ") scale(" k ")"))
-
-(defn fit-transform
-  ([view-box]
-   (fit-transform view-box nil))
-  ([{:keys [height width]} {:keys [height viewport-height width viewport-width]}]
-  (let [viewport-width (or viewport-width
-                           width
-                           (max 960 (min 1240 width)))
-        viewport-height (or viewport-height
-                            height
-                            (max 560 (min 860 height)))
-        scale (max 0.72 (min 1.02 (min (/ (- viewport-width 8) width)
-                                        (/ (- viewport-height 8) height))))
-        scaled-height (* height scale)
-        scaled-width (* width scale)
-        translate-x (/ (- viewport-width scaled-width) 2)
-        translate-y (/ (- viewport-height scaled-height) 2)]
-    {:x translate-x
-     :y translate-y
-     :k scale})))
-
-(defn clamp-scale [value]
-  (-> value
-      (max 0.65)
-      (min 2.4)))
-
-(defn wheel-zoom-state [event {:keys [x y k] :as zoom-state}]
-  (let [direction (if (pos? (.-deltaY event)) -1 1)
-        next-k (clamp-scale (+ k (* direction 0.14)))
-        scale-ratio (if (zero? k) 1 (/ next-k k))
-        svg-rect (.getBoundingClientRect (.-currentTarget event))
-        cursor-x (- (.-clientX event) (.-left svg-rect))
-        cursor-y (- (.-clientY event) (.-top svg-rect))]
-    {:x (- cursor-x (* (- cursor-x x) scale-ratio))
-     :y (- cursor-y (* (- cursor-y y) scale-ratio))
-     :k next-k}))
-
-(defn drag-delta [event last-point]
-  {:x (- (.-clientX event) (:x last-point))
-   :y (- (.-clientY event) (:y last-point))})
-
-(defn current-viewport-size [node]
-  {:width (.-clientWidth node)
-   :height (.-clientHeight node)})
-
-(defn apply-auto-fit! [node view-box zoom-mode* zoom-state*]
-  (when (and node (= :auto @zoom-mode*))
-    (reset! zoom-state* (fit-transform view-box (current-viewport-size node)))))
-
-(defn tree-svg-content [{:keys [nodes on-select transform]}]
-   [:g {:transform transform}
+(defn tree-svg-content [{:keys [nodes on-select]}]
+   [:g
    (for [{:keys [glyph height id prefix selected? width x y] :as node} nodes
          :when (not (str/blank? prefix))
          :let [roomy? (and (> width 72) (> height 54))
@@ -213,81 +154,18 @@
                 :dominant-baseline "central"}
          glyph])])])
 
-(defn interactive-tree-svg [{:keys [nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
-  (let [svg-node* (atom nil)
-        wheel-handler* (atom nil)
-        resize-observer* (atom nil)]
-    (r/create-class
-     {:display-name "cangjie-tree-svg"
-      :component-did-mount
-      (fn [_]
-        (when-let [svg-node @svg-node*]
-          (let [wheel-handler (fn [event]
-                                (.preventDefault event)
-                                (reset! zoom-mode* :manual)
-                                (swap! zoom-state* #(wheel-zoom-state event %)))]
-            (reset! wheel-handler* wheel-handler)
-            (.addEventListener svg-node "wheel" wheel-handler #js {:passive false}))
-          (let [observer (js/ResizeObserver.
-                          (fn [_]
-                            (apply-auto-fit! svg-node view-box zoom-mode* zoom-state*)))]
-            (reset! resize-observer* observer)
-            (.observe observer svg-node))
-          (apply-auto-fit! svg-node view-box zoom-mode* zoom-state*)))
-      :component-did-update
-      (fn [_ old-argv]
-        (let [old-props (second old-argv)
-              old-auto-fit-key (:auto-fit-key old-props)
-              old-view-box (:view-box old-props)]
-          (when-let [svg-node @svg-node*]
-            (when (or (not= old-auto-fit-key auto-fit-key)
-                      (not= old-view-box view-box))
-              (apply-auto-fit! svg-node view-box zoom-mode* zoom-state*)))))
-      :component-will-unmount
-      (fn [_]
-        (when-let [svg-node @svg-node*]
-          (when-let [wheel-handler @wheel-handler*]
-            (.removeEventListener svg-node "wheel" wheel-handler)))
-        (when-let [observer @resize-observer*]
-          (.disconnect observer)))
-      :reagent-render
-      (fn [{:keys [nodes view-box on-select zoom-mode* zoom-state* drag-state* auto-fit-key]}]
-        [:svg {:class "cangjie-tree-svg"
-               :ref #(reset! svg-node* %)
-               :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
-               :preserveAspectRatio "xMidYMid meet"
-               :on-pointer-down (fn [event]
-                                  (let [node-target (.closest (.-target event) ".cangjie-icicle-node")]
-                                    (when (and (= 0 (.-button event))
-                                               (nil? node-target))
-                                    (.setPointerCapture (.-currentTarget event) (.-pointerId event))
-                                    (reset! drag-state* {:x (.-clientX event)
-                                                         :y (.-clientY event)}))))
-               :on-pointer-move (fn [event]
-                                  (when-let [last-point @drag-state*]
-                                    (let [{:keys [x y]} (drag-delta event last-point)]
-                                      (reset! zoom-mode* :manual)
-                                      (swap! zoom-state* update :x + x)
-                                      (swap! zoom-state* update :y + y)
-                                      (reset! drag-state* {:x (.-clientX event)
-                                                           :y (.-clientY event)}))))
-               :on-pointer-up (fn [event]
-                                (when @drag-state*
-                                  (.releasePointerCapture (.-currentTarget event) (.-pointerId event))
-                                  (reset! drag-state* nil)))
-               :on-pointer-cancel #(reset! drag-state* nil)}
-         [tree-svg-content {:nodes nodes
-                            :on-select on-select
-                            :transform (transform-string @zoom-state*)}]])})))
+(defn interactive-tree-svg [{:keys [nodes view-box on-select]}]
+  [:svg {:class "cangjie-tree-svg"
+         :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
+         :preserveAspectRatio "xMidYMid meet"}
+   [tree-svg-content {:nodes nodes
+                      :on-select on-select}]])
 
 (defn select-entry! [entry]
   (swap! app-state* assoc
          :raw-query (:char entry)
          :selected-prefix (:code entry)
-         :expanded-prefixes (path-prefixes (:code entry))
-         :zoom-mode :auto
-         :zoom-state nil
-         :drag-state nil))
+         :expanded-prefixes (path-prefixes (:code entry))))
 
 (defn current-view []
   (let [{:keys [dataset expanded-prefixes raw-query selected-prefix locale]} @app-state*
@@ -338,10 +216,7 @@
                                               (= prefix selected-prefix))
                                        (last (sort-by count next-expanded))
                                        prefix)
-                    :expanded-prefixes next-expanded
-                    :zoom-mode :auto
-                    :zoom-state nil
-                    :drag-state nil)))))
+                    :expanded-prefixes next-expanded)))))
 
 (defn candidate-strip [locale matches active-entry]
   (let [candidates (->> matches
@@ -362,18 +237,11 @@
 
 (defn tree-panel []
   (let [{:keys [dataset active-entry exact-entry effective-prefix expanded-prefixes locale matches]} (current-view)
-        zoom-mode* (r/cursor app-state* [:zoom-mode])
-        zoom-state* (r/cursor app-state* [:zoom-state])
-        drag-state* (r/cursor app-state* [:drag-state])
         {:keys [edges nodes view-box]}
         (tree/tree-layout {:dataset dataset
                            :entry exact-entry
                            :prefix effective-prefix
-                           :expanded-prefixes expanded-prefixes})
-        auto-fit-key [effective-prefix expanded-prefixes (count nodes) (count edges)]
-        zoom-state (or @zoom-state* (fit-transform view-box))]
-    (when (nil? @zoom-state*)
-      (reset! zoom-state* zoom-state))
+                           :expanded-prefixes expanded-prefixes})]
     [:section {:class "atlas-card atlas-tree-card"}
      [candidate-strip locale matches active-entry]
      [:div {:class "cangjie-tree-canvas"}
@@ -381,11 +249,7 @@
                              :locale locale
                              :nodes nodes
                              :view-box view-box
-                             :on-select toggle-node!
-                             :zoom-mode* zoom-mode*
-                             :zoom-state* zoom-state*
-                             :drag-state* drag-state*
-                             :auto-fit-key auto-fit-key}]]]))
+                             :on-select toggle-node!}]]]))
 
 (defn footer-panel []
   (let [{:keys [locale]} @app-state*

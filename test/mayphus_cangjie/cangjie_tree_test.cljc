@@ -11,14 +11,14 @@
     (is (= "a" (:selected-prefix (first columns))))
     (is (= "arf" (:prefix (last columns))))))
 
-(deftest tree-layout-produces-leaf-for-exact-entry
+(deftest tree-layout-stops-at-five-code-rows
   (let [dataset @test-support/dataset
         layout (tree/tree-layout {:dataset dataset
-                                  :entry (cangjie/exact-char dataset "照")
-                                  :prefix "arf"})]
+                                  :entry (cangjie/exact-char dataset "磊")
+                                  :prefix "mrmrr"})]
     (is (seq (:nodes layout)))
     (is (seq (:edges layout)))
-    (is (some #(= "照" (:glyph %)) (:nodes layout)))))
+    (is (not (some #(= "磊" (:glyph %)) (:nodes layout))))))
 
 (deftest tree-layout-keeps-ancestor-prefixes-visible
   (let [dataset @test-support/dataset
