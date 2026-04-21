@@ -157,7 +157,7 @@
 (defn interactive-tree-svg [{:keys [nodes view-box on-select]}]
   [:svg {:class "cangjie-tree-svg"
          :viewBox (str "0 0 " (:width view-box) " " (:height view-box))
-         :preserveAspectRatio "xMidYMid meet"}
+         :preserveAspectRatio "xMidYMin meet"}
    [tree-svg-content {:nodes nodes
                       :on-select on-select}]])
 
@@ -221,19 +221,31 @@
 (defn candidate-strip [locale matches active-entry]
   (let [candidates (->> matches
                         (take 18)
-                        vec)]
-    (when (seq candidates)
-      [:div {:class "cangjie-candidate-strip"}
-       [:div {:class "cangjie-candidate-row"}
-        (for [{:keys [char code] :as entry} candidates]
-          ^{:key (str char "-" code)}
-          [:button {:class (str "cangjie-candidate"
-                                (when (= code (:code active-entry)) " is-active"))
-                    :type "button"
-                    :title (str char " " (str/upper-case code))
-                    :on-click #(select-entry! entry)}
-           [:span {:class "cangjie-candidate-char"} char]
-           [:span {:class "cangjie-candidate-code"} (str/upper-case code)]])]])))
+                        vec)
+        visible-candidates (if (seq candidates)
+                             candidates
+                             [{:char " "
+                               :code "placeholder"}
+                              {:char " "
+                               :code "placeholder-2"}])]
+    [:div {:class "cangjie-candidate-strip"}
+     [:div {:class "cangjie-candidate-row"}
+      (for [{:keys [char code] :as entry} visible-candidates]
+        ^{:key (str char "-" code)}
+        [:button {:class (str "cangjie-candidate"
+                              (when (= code (:code active-entry)) " is-active")
+                              (when-not (seq candidates) " is-placeholder"))
+                  :type "button"
+                  :title (when (seq candidates)
+                           (str char " " (str/upper-case code)))
+                  :tab-index (when-not (seq candidates) -1)
+                  :aria-hidden (when-not (seq candidates) true)
+                  :on-click #(when (seq candidates)
+                               (select-entry! entry))}
+         [:span {:class "cangjie-candidate-char"} char]
+         [:span {:class "cangjie-candidate-code"}
+          (when (seq candidates)
+            (str/upper-case code))]])]]))
 
 (defn tree-panel []
   (let [{:keys [dataset active-entry exact-entry effective-prefix expanded-prefixes locale matches]} (current-view)

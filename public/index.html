@@ -242,6 +242,7 @@
       .cangjie-candidate-strip {
         margin-bottom: 0.75rem;
         padding-bottom: 0.7rem;
+        min-height: 3rem;
         border-bottom: 1px solid var(--line);
       }
 
@@ -273,6 +274,11 @@
         border-color: var(--line-strong);
         color: var(--text);
         background: rgba(109, 75, 62, 0.04);
+      }
+
+      .cangjie-candidate.is-placeholder {
+        visibility: hidden;
+        pointer-events: none;
       }
 
       .cangjie-candidate-char {
