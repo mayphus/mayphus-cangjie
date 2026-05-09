@@ -1,6 +1,6 @@
 # mayphus-cangjie
 
-Standalone Cangjie tree explorer extracted from `mayphus-sites`.
+Standalone Cangjie tree explorer extracted from `mayphus.org`.
 
 It keeps the focused visual lookup experience, now as its own small ClojureScript app deployed on `cangjie.mayphus.org`.
 
