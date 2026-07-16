@@ -1,4 +1,6 @@
-# mayphus-cangjie
+# Cangjie Tree Explorer
+
+> **Status:** Deployed experiment — [open the live Cangjie tree explorer](https://cangjie.mayphus.org).
 
 Standalone Cangjie tree explorer extracted from `mayphus.org`.
 
